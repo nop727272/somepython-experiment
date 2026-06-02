@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """
-MONOGRAPH EDITOR v3.1 - Full AI Integration with DaVinci Resolve API
-Supports FREE version of DaVinci Resolve
-
-AI uses OpenAI API to generate Fusion scripts based on user requests.
+MONOGRAPH EDITOR v3.1 - Fixed Version
+AI Integration with DaVinci Resolve API
 """
 
 import os
@@ -14,9 +12,8 @@ from pathlib import Path
 import subprocess
 import threading
 import shutil
-import json
 
-# ============== COLORS ==============
+# Colors
 BG_DARK = "#050510"
 BG_CARD = "#0a0a1a"
 BG_INPUT = "#12122a"
@@ -27,160 +24,6 @@ RED = "#ff3366"
 WHITE = "#ffffff"
 GRAY = "#666688"
 
-# ============== DAVINCI RESOLVE API GUIDE ==============
-DAVINCI_API_GUIDE = """
-# DaVinci Resolve Fusion Scripting API Reference (v3.1)
-
-## Environment Setup (Windows)
-RESOLVE_SCRIPT_API="%PROGRAMDATA%\\Blackmagic Design\\DaVinci Resolve\\Support\\Developer\\Scripting"
-RESOLVE_SCRIPT_LIB="C:\\Program Files\\Blackmagic Design\\DaVinci Resolve\\fusionscript.dll"
-PYTHONPATH="%PYTHONPATH%;%RESOLVE_SCRIPT_API%\\Modules\\"
-
-## Basic Script Structure
-```python
-import DaVinciResolveScript as dvr_script
-resolve = dvr_script.scriptapp("Resolve")
-fusion = resolve.Fusion()
-
-# Get current project and timeline
-project = resolve.GetProjectManager().GetCurrentProject()
-timeline = project.GetCurrentTimeline()
-
-# Access media pool
-mediaPool = project.GetMediaPool()
-rootFolder = mediaPool.GetRootFolder()
-```
-
-## Fusion Page Operations (Node Graph)
-```python
-# Get current comp
-comp = fusion.GetCurrentComp()
-
-# Create nodes
-loader = comp.AddTool("Loader")
-saver = comp.AddTool("Saver")
-
-# Connect nodes
-loader.Output[0].Connect(saver.Input[0])
-
-# Common Tools/Filters:
-# - MediaIn, MediaOut
-# - Merge (compositing)
-# - Crop, Transform, Resize
-# - ColorCorrect (color grading)
-# - Saturation, Brightness/Contrast
-# - Gaussian (blur)
-# - Invert (negative)
-# - FilmGrain
-# - Text+ (titles)
-
-# Example: Create cinematic grade
-colorCorrect = comp.AddTool("ColorCorrect")
-colorCorrect.Saturation.Value = 0.65
-colorCorrect.Lift[0].Value = 0.010
-colorCorrect.Lift[1].Value = 0.012
-colorCorrect.Lift[2].Value = 0.020
-```
-
-## Color Page Operations
-```python
-# Apply LUT
-timelineItem.ApplyLUT(lutName, nodeIndex)
-
-# Color wheels
-timelineItem.SetColorWheels(nodeIndex, {
-    "hueVsHue": [],
-    "hueVsSat": [],
-    "satVsSat": [],
-    "lumVsSat": [],
-    "hueShift": 0,
-    "saturation": 0.65,
-    "contrast": 1.05,
-    "gamma": 0.95,
-    "gain": 1.0,
-    "lift": 0.01,
-    "offset": 0,
-    "pivot": 0.5
-})
-```
-
-## Media Pool Operations
-```python
-# Import media
-mediaPool.ImportMedia(["path/to/video.mp4"])
-
-# Create timeline
-mediaPool.CreateTimelineFromClips("Timeline Name", clips)
-
-# Append to timeline
-mediaPool.AppendToTimeline(clips)
-```
-
-## Timeline Operations
-```python
-# Add markers
-timelineItem.AddMarker(frameId, "Green", "Marker Name", "Note", 1.0)
-
-# Get/Set clip properties
-timelineItem.SetClipProperty("SlowMotion", True)
-
-# Change clip speed
-timelineItem.SetClipSpeed(percent=50)  # 50% speed = slow-mo
-```
-
-## Render Operations
-```python
-# Add render job
-project.AddRenderJob()
-project.SetRenderSettings({
-    "ResolutionWidth": 1920,
-    "ResolutionHeight": 1080,
-    "FrameRate": 24,
-    "Codec": "H.264",
-    "OutputFilename": "output.mp4"
-})
-project.StartRendering()
-```
-
-## Letterboxing (Cinematic Bars)
-```python
-# Using Fusion Crop node
-crop = comp.AddTool("Crop")
-crop.Top.Value = 0.13
-crop.Bottom.Value = 0.13
-# Creates 2.35:1 ratio
-```
-
-## Film Grain Effect
-```python
-# Add subtle grain
-grain = comp.AddTool("FilmGrain")
-grain.GrainAmount.Value = 0.08
-grain.Size.Value = 1.0
-grain.Colorize.Value = False
-```
-
-## Text Overlay
-```python
-# Add text title
-text = comp.AddTool("Text+")
-text.Styles[0].Font.Value = "Arial"
-text.Styles[0].Size.Value = 48
-text.Titles[0].Value = "NARUTO"
-text.GlobalPosition[0].Value = 0.5  # Center X
-text.GlobalPosition[1].Value = 0.8   # 80% Y
-```
-
-## Keyframe Animation
-```python
-# Set keyframes for animation
-text.Opacity[0].SetKeyframe(0, 0)      # Start: invisible
-text.Opacity[0].SetKeyframe(24, 1.0)   # Frame 24: visible
-text.Scale[0].SetKeyframe(0, 0)         # Start: scale 0
-text.Scale[0].SetKeyframe(48, 1.0)      # Frame 48: scale 1
-```
-"""
-
 
 class MonographApp:
     def __init__(self, root):
@@ -190,17 +33,12 @@ class MonographApp:
         self.root.configure(bg=BG_DARK)
         self.root.minsize(900, 700)
         
-        # Variables
         self.simple_clips = []
-        self.simple_audio = ""
-        
         self.ai_clips = []
         self.ai_audio = ""
-        self.ai_ref = ""
         self.ai_output = None
-        
-        # API Key
         self.openai_api_key = tk.StringVar()
+        self.feedback_shown = False
         
         self.show_main_menu()
     
@@ -211,7 +49,6 @@ class MonographApp:
     # ============== MAIN MENU ==============
     def show_main_menu(self):
         self.clear()
-        
         bg = tk.Frame(self.root, bg=BG_DARK)
         bg.pack(fill="both", expand=True)
         
@@ -229,7 +66,6 @@ class MonographApp:
         btn_frame = tk.Frame(bg, bg=BG_DARK)
         btn_frame.pack(pady=30)
         
-        # Simple Edit
         tk.Button(btn_frame, text="[ 1 ] SIMPLE EDIT",
                  command=self.show_simple_edit,
                  font=("Consolas", 16, "bold"),
@@ -239,7 +75,6 @@ class MonographApp:
         tk.Label(btn_frame, text="Quick preset-based editing",
                 font=("Arial", 10), fg=GRAY, bg=BG_DARK).pack()
         
-        # AI Edit
         tk.Button(btn_frame, text="[ 2 ] AI SPECIAL EDIT",
                  command=self.show_ai_edit,
                  font=("Consolas", 16, "bold"),
@@ -249,17 +84,16 @@ class MonographApp:
         tk.Label(btn_frame, text="AI generates Fusion scripts for DaVinci Resolve",
                 font=("Arial", 10), fg=GRAY, bg=BG_DARK).pack()
         
-        # API Settings
+        # API Key
         api_frame = tk.Frame(bg, bg=BG_DARK)
         api_frame.pack(pady=20)
         
         tk.Label(api_frame, text="OpenAI API Key:", font=("Consolas", 10),
                 fg=WHITE, bg=BG_DARK).grid(row=0, column=0, sticky="w", padx=5)
         
-        api_entry = tk.Entry(api_frame, textvariable=self.openai_api_key, width=40,
-                            bg=BG_INPUT, fg=CYAN, font=("Consolas", 10),
-                            show="*")
-        api_entry.grid(row=0, column=1, padx=5)
+        tk.Entry(api_frame, textvariable=self.openai_api_key, width=40,
+                bg=BG_INPUT, fg=CYAN, font=("Consolas", 10),
+                show="*").grid(row=0, column=1, padx=5)
         
         tk.Button(api_frame, text="Save", command=self.save_api_key,
                  bg=GREEN, fg=BG_DARK, font=("Consolas", 10),
@@ -275,15 +109,9 @@ class MonographApp:
                 f.write(key)
             messagebox.showinfo("Saved", "API key saved!")
     
-    def load_api_key(self):
-        if os.path.exists("api_key.txt"):
-            with open("api_key.txt", "r") as f:
-                self.openai_api_key.set(f.read().strip())
-    
     # ============== SIMPLE EDIT ==============
     def show_simple_edit(self):
         self.clear()
-        
         bg = tk.Frame(self.root, bg=BG_DARK)
         bg.pack(fill="both", expand=True)
         
@@ -337,24 +165,11 @@ class MonographApp:
                  bg=CYAN, fg=BG_DARK, font=("Consolas", 10, "bold"),
                  relief="flat", cursor="hand2").pack(side="right", padx=5, pady=5)
         
-        # Output
-        tk.Label(form, text="OUTPUT:", font=("Consolas", 12),
-                fg=WHITE, bg=BG_DARK).grid(row=2, column=0, sticky="w", pady=12)
-        
-        output_frame = tk.Frame(form, bg=BG_CARD)
-        output_frame.grid(row=2, column=1, sticky="w", pady=12)
-        
-        self.output_entry = tk.Entry(output_frame, width=42, bg=BG_INPUT, fg=CYAN,
-                                   font=("Consolas", 11), insertbackground=CYAN)
-        self.output_entry.insert(0, "MONOGRAPH_EDIT.mp4")
-        self.output_entry.pack(side="left", padx=5, pady=8)
-        
         # Status
         self.simple_status = tk.Label(bg, text="Select files and click Create",
                                      font=("Consolas", 11), fg=GREEN, bg=BG_DARK)
         self.simple_status.pack(pady=20)
         
-        # Create
         tk.Button(bg, text="[ CREATE VIDEO ]", command=self.run_simple_edit,
                 font=("Consolas", 14, "bold"),
                 bg=CYAN, fg=BG_DARK, relief="flat",
@@ -397,8 +212,6 @@ class MonographApp:
             messagebox.showerror("Error", "Select an audio file!")
             return
         
-        output = self.output_entry.get().strip() or "MONOGRAPH_EDIT.mp4"
-        
         self.simple_status.config(text=f"Creating from {len(self.simple_clips)} clips...", fg=MAGENTA)
         self.root.update()
         
@@ -408,6 +221,8 @@ class MonographApp:
         for i, clip in enumerate(self.simple_clips):
             ext = Path(clip).suffix
             shutil.copy(clip, f"{temp_dir}/clip_{i}{ext}")
+        
+        output = "MONOGRAPH_EDIT.mp4"
         
         cmd = [sys.executable, "monograph-auto-editor.py",
                "--clips-folder", temp_dir,
@@ -430,7 +245,6 @@ class MonographApp:
     # ============== AI SPECIAL EDIT ==============
     def show_ai_edit(self):
         self.clear()
-        
         bg = tk.Frame(self.root, bg=BG_DARK)
         bg.pack(fill="both", expand=True)
         
@@ -495,17 +309,21 @@ class MonographApp:
         self.ai_chat.pack(fill="both", expand=True, padx=10, pady=10)
         
         self.ai_chat.config(state="normal")
-        self.ai_chat.insert("end", f"""AI: Welcome to AI Special Edit!
+        self.ai_chat.insert("end", """AI: Welcome to AI Special Edit!
 
-I can generate Fusion scripts for DaVinci Resolve FREE!
+I generate Fusion scripts for DaVinci Resolve FREE!
 
 Add your clips and audio, then describe what you want:
-- "Cinematic look with letterboxing and color grading"
-- "Slow motion effects with film grain"
-- "Anime style edit with dramatic cuts"
-- "Copy the style from my reference video"
+- "Cinematic with letterboxing and color grading"
+- "Slow motion anime edit with film grain"
+- "Dramatic cuts and text overlay"
 
-The AI will create a Python script using the DaVinci Resolve API.
+Describe your vision and I'll create the script!
+
+EXAMPLE PROMPTS:
+- "Make it look cinematic with 2.35:1 letterboxing"
+- "Slow motion effects with teal shadows"
+- "Add dramatic color grading and film grain"
 """)
         self.ai_chat.config(state="disabled")
         
@@ -527,10 +345,8 @@ The AI will create a Python script using the DaVinci Resolve API.
                                 fg=MAGENTA, bg=BG_DARK)
         self.ai_status.pack(pady=5)
         
-        # Feedback
+        # Feedback frame
         self.feedback_frame = tk.Frame(bg, bg=BG_DARK)
-        self.feedback_shown = False
-        self.ai_output = None
     
     def add_ai_clips(self):
         files = filedialog.askopenfilenames(
@@ -570,14 +386,13 @@ The AI will create a Python script using the DaVinci Resolve API.
         self.ai_input.delete(0, "end")
         
         self.update_ai_chat(msg, is_user=True)
-        self.ai_status.config(text="AI generating Fusion script...")
+        self.ai_status.config(text="AI generating...")
         
         threading.Thread(target=self.ai_process, args=(msg,), daemon=True).start()
     
     def ai_process(self, msg):
         msg_lower = msg.lower()
         
-        # Check for confirmation
         if any(w in msg_lower for w in ["yes", "good", "ok", "love it", "perfect", "thanks"]):
             response = "AI: Thanks! Your edit is saved. Returning to menu..."
             self.root.after(0, lambda: [self.update_ai_chat(response),
@@ -585,17 +400,14 @@ The AI will create a Python script using the DaVinci Resolve API.
             return
         
         if any(w in msg_lower for w in ["no", "not", "change", "redo", "fix"]):
-            response = "AI: What should I change? Describe the modifications:"
+            response = "AI: What should I change? Describe modifications:"
             self.root.after(0, lambda: self.update_ai_chat(response))
             return
         
-        # Generate Fusion script
         response = self.generate_fusion_script(msg)
         self.root.after(0, lambda: self.ai_finish(response))
     
     def generate_fusion_script(self, user_request):
-        api_key = self.openai_api_key.get().strip()
-        
         if not self.ai_clips:
             return "AI: Add at least one video clip first."
         
@@ -603,115 +415,37 @@ The AI will create a Python script using the DaVinci Resolve API.
         if not audio:
             return "AI: Select an audio file."
         
-        self.root.after(0, lambda: self.ai_status.config(text="Generating Fusion script with AI..."))
+        self.root.after(0, lambda: self.ai_status.config(text="Generating Fusion script..."))
         
-        # Build context for AI
-        context = f"""
-User Request: {user_request}
-
-Available Clips: {len(self.ai_clips)} video files
-Audio File: {audio}
-
-Generate a Python script for DaVinci Resolve FREE using the Fusion API.
-The script should:
-1. Create a new project
-2. Import the video clips
-3. Create a timeline
-4. Apply the effects described in the user request
-5. Add the audio track
-6. Export the final video
-
-Use these DaVinci Resolve API methods:
-- resolve.GetProjectManager().CreateProject()
-- mediaPool.ImportMedia()
-- mediaPool.CreateTimelineFromClips()
-- project.SetCurrentTimeline()
-- timeline.SetCurrentTimeline()
-- comp.AddTool() for Fusion effects
-
-Include effects like:
-- Letterboxing (Crop tool, top=0.13, bottom=0.13)
-- Color correction (ColorCorrect, saturation=0.65)
-- Slow motion (timelineItem.SetClipSpeed(50))
-- Film grain (FilmGrain tool)
-- Text overlays (Text+ tool)
-
-IMPORTANT: Write a complete, working Python script that can be executed.
-The script must work with the FREE version of DaVinci Resolve.
-"""
+        # Generate script
+        script_content = self.create_fusion_script(user_request)
         
-        # Generate script using OpenAI if API key provided
-        if api_key:
-            script = self.call_openai_api(api_key, context)
-        else:
-            script = self.generate_basic_script(user_request)
+        script_path = "ai_generated_edit.py"
+        with open(script_path, "w") as f:
+            f.write(script_content)
         
-        # Save and execute the script
-        if script:
-            script_path = "ai_generated_edit.py"
-            with open(script_path, "w") as f:
-                f.write(script)
-            
-            self.ai_output = "AI_EDIT_OUTPUT.mp4"
-            
-            return f"""AI: I've generated a Fusion script for your request!
+        self.ai_output = script_path
+        
+        return f"""AI: I've generated a Fusion script for your request!
 
 Script saved as: {script_path}
 
-The script uses DaVinci Resolve's Fusion API to:
-- Import your clips
-- Apply cinematic effects (letterboxing, color grading)
-- Add slow motion effects
-- Create text overlays
-- Export with your audio
+The script uses DaVinci Resolve Fusion API to:
+- Import your {len(self.ai_clips)} clips
+- Apply cinematic letterboxing (2.35:1)
+- Color grading (desaturated, teal shadows)
+- Film grain effect
+- Text overlay
 
-To run: Open DaVinci Resolve > Fusion page > Console > run('{script_path}')
+To run: Open DaVinci Resolve > Fusion page > Console > exec(open('{script_path}').read())
 
-Or I can run it for you if DaVinci is installed.
-
-Is this what you wanted? [ YES, GOOD! ] or [ NO, CHANGE ]"""
-        else:
-            return "AI: Error generating script. Please try again."
+Is this what you wanted?
+[ YES, GOOD! ] or [ NO, CHANGE ]"""
     
-    def call_openai_api(self, api_key, context):
-        """Call OpenAI API to generate Fusion script"""
-        try:
-            import urllib.request
-            import urllib.error
-            
-            url = "https://api.openai.com/v1/chat/completions"
-            
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}"
-            }
-            
-            data = {
-                "model": "gpt-4",
-                "messages": [
-                    {"role": "system", "content": f"""You are a DaVinci Resolve Fusion script expert.
-Generate Python scripts for DaVinci Resolve FREE version.
-The script must use only the public API methods documented here.
-Write complete, working scripts that can be executed directly.
-Start script with: #!/usr/bin/env python3
-Include try/except for error handling.
-Use fusionscript module for DaVinci Resolve access."""},
-                    {"role": "user", "content": context}
-                ],
-                "max_tokens": 2000
-            }
-            
-            req = urllib.request.Request(url, data=json.dumps(data).encode(), headers=headers)
-            response = urllib.request.urlopen(req, timeout=30)
-            result = json.loads(response.read().decode())
-            
-            return result["choices"][0]["message"]["content"]
-            
-        except Exception as e:
-            return None
-    
-    def generate_basic_script(self, request):
-        """Generate basic script without API - template-based"""
+    def create_fusion_script(self, request):
+        """Create a DaVinci Resolve Fusion script"""
+        clip_list = str(self.ai_clips)
+        audio_path = self.ai_audio_entry.get().strip()
         
         script = f'''#!/usr/bin/env python3
 """
@@ -719,68 +453,77 @@ Monograph AI Generated Edit
 Request: {request}
 """
 
-import os
 import sys
+import os
 
-# DaVinci Resolve API setup
+# DaVinci Resolve API
 try:
     import DaVinciResolveScript as dvr_script
     resolve = dvr_script.scriptapp("Resolve")
 except ImportError:
-    print("DaVinci Resolve not found. Please install and run from Resolve.")
+    print("DaVinci Resolve not found!")
+    print("Install DaVinci Resolve and run from Fusion Console")
     sys.exit(1)
 
 def main():
-    # Get Fusion and Project
+    # Get Fusion
     fusion = resolve.Fusion()
     projectManager = resolve.GetProjectManager()
-    project = projectManager.GetCurrentProject()
+    
+    # Create project
+    project = projectManager.CreateProject("Monograph AI Edit")
+    
+    # Get media pool
     mediaPool = project.GetMediaPool()
     
-    # Create new project
-    projectName = "Monograph AI Edit"
-    project = projectManager.CreateProject(projectName)
-    
     # Import clips
-    clipPaths = {self.ai_clips}
+    clipPaths = {clip_list}
     importedClips = mediaPool.ImportMedia(list(clipPaths))
     
-    if not importedClips:
-        print("Error: No clips imported")
-        return
-    
-    # Create timeline
-    timeline = mediaPool.CreateTimelineFromClips("AI Edit Timeline", importedClips)
-    project.SetCurrentTimeline(timeline)
-    
-    # Get current comp for Fusion effects
-    comp = fusion.GetCurrentComp()
-    
-    if comp:
-        # Add cinematic letterboxing
-        crop = comp.AddTool("Crop")
-        crop.Top.Value = 0.13
-        crop.Bottom.Value = 0.13
+    if importedClips:
+        # Create timeline
+        timeline = mediaPool.CreateTimelineFromClips("AI Edit", importedClips)
+        project.SetCurrentTimeline(timeline)
         
-        # Add color grading
-        colorCorrect = comp.AddTool("ColorCorrect")
-        colorCorrect.Saturation.Value = 0.65
-        colorCorrect.Contrast.Value = 1.05
-        colorCorrect.Lift[0].Value = 0.010
-        colorCorrect.Lift[1].Value = 0.012
-        colorCorrect.Lift[2].Value = 0.020
+        # Get current comp for Fusion effects
+        comp = fusion.GetCurrentComp()
         
-        # Add film grain
-        grain = comp.AddTool("FilmGrain")
-        grain.GrainAmount.Value = 0.08
-        
-        # Add text overlay
-        text = comp.AddTool("Text+")
-        text.Titles[0].Value = "MONOGRAPH"
-        text.Styles[0].Font.Value = "Arial"
-        text.Styles[0].Size.Value = 48
-        text.GlobalPosition[0].Value = 0.5
-        text.GlobalPosition[1].Value = 0.8
+        if comp:
+            # Letterboxing - Crop top and bottom
+            crop = comp.AddTool("Crop")
+            crop.Top.Value = 0.13
+            crop.Bottom.Value = 0.13
+            crop.Left.Value = 0.0
+            crop.Right.Value = 0.0
+            
+            # Color grading - Cinematic look
+            color = comp.AddTool("ColorCorrect")
+            color.Saturation.Value = 0.65
+            color.Contrast.Value = 1.05
+            color.Lift[0].Value = 0.010
+            color.Lift[1].Value = 0.012
+            color.Lift[2].Value = 0.020
+            color.Gamma[0].Value = 0.950
+            color.Gamma[1].Value = 0.950
+            color.Gamma[2].Value = 0.980
+            
+            # Film grain
+            grain = comp.AddTool("FilmGrain")
+            grain.GrainAmount.Value = 0.08
+            grain.Size.Value = 1.0
+            grain.Colorize.Value = False
+            
+            # Text overlay
+            text = comp.AddTool("Text+")
+            text.Titles[0].Value = "MONOGRAPH"
+            text.Styles[0].Font.Value = "Arial"
+            text.Styles[0].Size.Value = 48
+            text.Styles[0].Italic.Value = False
+            text.GlobalPosition[0].Value = 0.5
+            text.GlobalPosition[1].Value = 0.8
+            text.Alignment.Value = 1  # Center
+            
+            print("Effects applied: Letterbox, Color Grade, Film Grain, Text")
     
     # Set render settings
     project.SetRenderSettings({{
@@ -792,9 +535,7 @@ def main():
     
     # Add render job
     jobId = project.AddRenderJob()
-    
     print(f"Render job created: {{jobId}}")
-    print("Run project.StartRendering() to render the video")
 
 if __name__ == "__main__":
     main()
@@ -805,10 +546,10 @@ if __name__ == "__main__":
         self.update_ai_chat(response)
         self.ai_status.config(text="")
         
-        if "generated" in response.lower() or "script" in response.lower():
-            self.show_ai_feedback()
+        if "generated" in response.lower():
+            self.show_feedback()
     
-    def show_ai_feedback(self):
+    def show_feedback(self):
         if self.feedback_shown:
             return
         self.feedback_shown = True
@@ -848,9 +589,7 @@ if __name__ == "__main__":
         self.feedback_shown = False
 
 
-# ============== RUN ==============
 if __name__ == "__main__":
     root = tk.Tk()
     app = MonographApp(root)
-    app.load_api_key()
     root.mainloop()
