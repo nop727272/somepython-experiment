@@ -585,7 +585,7 @@ def create_sample_files():
         print("   You can still use the editor - just add your own clips!")
     
     # Create info file
-    with open("README_CLIPS.txt", "w") as f:
+    with open("README_CLIPS.txt", "w", encoding="utf-8") as f:
         f.write("""
 MONOGRAPH AUTO-EDITOR - SETUP INSTRUCTIONS
 ==========================================
@@ -610,7 +610,7 @@ TO USE THE EDITOR:
 
 5. POST IT!
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+============================================
 
 HOW IT WORKS:
 - Automatically detects beats in your audio
@@ -621,22 +621,22 @@ HOW IT WORKS:
 - Fade in/out transitions
 - Exports web-optimized video
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+============================================
 
 FILES NEEDED:
-  📁 clips/        → Your video clips
-  🎵 audio.mp3     → Your audio track
+  clips/        -> Your video clips
+  audio.mp3     -> Your audio track
 
 FILE CREATED:
-  🎬 FINAL_MONOGRAPH_EDIT.mp4 → Ready to post!
+  FINAL_MONOGRAPH_EDIT.mp4 -> Ready to post!
 """)
     
-    print("📁 Created 'clips' folder")
-    print("📄 Created 'README_CLIPS.txt' with instructions")
+    print("[OK] Created 'clips' folder")
+    print("[OK] Created 'README_CLIPS.txt' with instructions")
     print()
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("✅ SETUP COMPLETE!")
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("========================================")
+    print("SETUP COMPLETE!")
+    print("========================================")
     print()
     print("NEXT STEPS:")
     print("1. Install ffmpeg: sudo apt install ffmpeg")
@@ -644,7 +644,7 @@ FILE CREATED:
     print("3. Add your audio as 'audio.mp3'")
     print("4. Run: ./run_edit.sh")
     print()
-    print("Your ready-to-post video: FINAL_MONOGRAPH_EDIT.mp4 🎉")
+    print("Your ready-to-post video: FINAL_MONOGRAPH_EDIT.mp4")
 
 
 # ============================================================
