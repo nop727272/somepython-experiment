@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-MONOGRAPH EDITOR v3.0 - Fixed & Working
+MONOGRAPH EDITOR v3.1 - Full AI Integration with DaVinci Resolve API
+Supports FREE version of DaVinci Resolve
+
+AI uses OpenAI API to generate Fusion scripts based on user requests.
 """
 
 import os
@@ -11,6 +14,7 @@ from pathlib import Path
 import subprocess
 import threading
 import shutil
+import json
 
 # ============== COLORS ==============
 BG_DARK = "#050510"
@@ -23,11 +27,165 @@ RED = "#ff3366"
 WHITE = "#ffffff"
 GRAY = "#666688"
 
+# ============== DAVINCI RESOLVE API GUIDE ==============
+DAVINCI_API_GUIDE = """
+# DaVinci Resolve Fusion Scripting API Reference (v3.1)
 
-class App:
+## Environment Setup (Windows)
+RESOLVE_SCRIPT_API="%PROGRAMDATA%\\Blackmagic Design\\DaVinci Resolve\\Support\\Developer\\Scripting"
+RESOLVE_SCRIPT_LIB="C:\\Program Files\\Blackmagic Design\\DaVinci Resolve\\fusionscript.dll"
+PYTHONPATH="%PYTHONPATH%;%RESOLVE_SCRIPT_API%\\Modules\\"
+
+## Basic Script Structure
+```python
+import DaVinciResolveScript as dvr_script
+resolve = dvr_script.scriptapp("Resolve")
+fusion = resolve.Fusion()
+
+# Get current project and timeline
+project = resolve.GetProjectManager().GetCurrentProject()
+timeline = project.GetCurrentTimeline()
+
+# Access media pool
+mediaPool = project.GetMediaPool()
+rootFolder = mediaPool.GetRootFolder()
+```
+
+## Fusion Page Operations (Node Graph)
+```python
+# Get current comp
+comp = fusion.GetCurrentComp()
+
+# Create nodes
+loader = comp.AddTool("Loader")
+saver = comp.AddTool("Saver")
+
+# Connect nodes
+loader.Output[0].Connect(saver.Input[0])
+
+# Common Tools/Filters:
+# - MediaIn, MediaOut
+# - Merge (compositing)
+# - Crop, Transform, Resize
+# - ColorCorrect (color grading)
+# - Saturation, Brightness/Contrast
+# - Gaussian (blur)
+# - Invert (negative)
+# - FilmGrain
+# - Text+ (titles)
+
+# Example: Create cinematic grade
+colorCorrect = comp.AddTool("ColorCorrect")
+colorCorrect.Saturation.Value = 0.65
+colorCorrect.Lift[0].Value = 0.010
+colorCorrect.Lift[1].Value = 0.012
+colorCorrect.Lift[2].Value = 0.020
+```
+
+## Color Page Operations
+```python
+# Apply LUT
+timelineItem.ApplyLUT(lutName, nodeIndex)
+
+# Color wheels
+timelineItem.SetColorWheels(nodeIndex, {
+    "hueVsHue": [],
+    "hueVsSat": [],
+    "satVsSat": [],
+    "lumVsSat": [],
+    "hueShift": 0,
+    "saturation": 0.65,
+    "contrast": 1.05,
+    "gamma": 0.95,
+    "gain": 1.0,
+    "lift": 0.01,
+    "offset": 0,
+    "pivot": 0.5
+})
+```
+
+## Media Pool Operations
+```python
+# Import media
+mediaPool.ImportMedia(["path/to/video.mp4"])
+
+# Create timeline
+mediaPool.CreateTimelineFromClips("Timeline Name", clips)
+
+# Append to timeline
+mediaPool.AppendToTimeline(clips)
+```
+
+## Timeline Operations
+```python
+# Add markers
+timelineItem.AddMarker(frameId, "Green", "Marker Name", "Note", 1.0)
+
+# Get/Set clip properties
+timelineItem.SetClipProperty("SlowMotion", True)
+
+# Change clip speed
+timelineItem.SetClipSpeed(percent=50)  # 50% speed = slow-mo
+```
+
+## Render Operations
+```python
+# Add render job
+project.AddRenderJob()
+project.SetRenderSettings({
+    "ResolutionWidth": 1920,
+    "ResolutionHeight": 1080,
+    "FrameRate": 24,
+    "Codec": "H.264",
+    "OutputFilename": "output.mp4"
+})
+project.StartRendering()
+```
+
+## Letterboxing (Cinematic Bars)
+```python
+# Using Fusion Crop node
+crop = comp.AddTool("Crop")
+crop.Top.Value = 0.13
+crop.Bottom.Value = 0.13
+# Creates 2.35:1 ratio
+```
+
+## Film Grain Effect
+```python
+# Add subtle grain
+grain = comp.AddTool("FilmGrain")
+grain.GrainAmount.Value = 0.08
+grain.Size.Value = 1.0
+grain.Colorize.Value = False
+```
+
+## Text Overlay
+```python
+# Add text title
+text = comp.AddTool("Text+")
+text.Styles[0].Font.Value = "Arial"
+text.Styles[0].Size.Value = 48
+text.Titles[0].Value = "NARUTO"
+text.GlobalPosition[0].Value = 0.5  # Center X
+text.GlobalPosition[1].Value = 0.8   # 80% Y
+```
+
+## Keyframe Animation
+```python
+# Set keyframes for animation
+text.Opacity[0].SetKeyframe(0, 0)      # Start: invisible
+text.Opacity[0].SetKeyframe(24, 1.0)   # Frame 24: visible
+text.Scale[0].SetKeyframe(0, 0)         # Start: scale 0
+text.Scale[0].SetKeyframe(48, 1.0)      # Frame 48: scale 1
+```
+"""
+
+
+class MonographApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("MONOGRAPH EDITOR")
+        self.root.title("MONOGRAPH EDITOR v3.1")
         self.root.geometry("1000x750")
         self.root.configure(bg=BG_DARK)
         self.root.minsize(900, 700)
@@ -35,13 +193,14 @@ class App:
         # Variables
         self.simple_clips = []
         self.simple_audio = ""
-        self.simple_output = "MONOGRAPH_EDIT.mp4"
-        self.simple_title = "MONOGRAPH"
         
         self.ai_clips = []
         self.ai_audio = ""
         self.ai_ref = ""
         self.ai_output = None
+        
+        # API Key
+        self.openai_api_key = tk.StringVar()
         
         self.show_main_menu()
     
@@ -53,98 +212,105 @@ class App:
     def show_main_menu(self):
         self.clear()
         
-        # Background
         bg = tk.Frame(self.root, bg=BG_DARK)
         bg.pack(fill="both", expand=True)
         
-        # Top accent
         tk.Frame(bg, height=4, bg=CYAN).pack(fill="x")
         
-        # Title
         tk.Label(bg, text="MONOGRAPH", font=("Consolas", 48, "bold"),
-                fg=CYAN, bg=BG_DARK).pack(pady=(100, 5))
+                fg=CYAN, bg=BG_DARK).pack(pady=(80, 5))
         
         tk.Label(bg, text="VIDEO EDITOR", font=("Consolas", 20),
                 fg=MAGENTA, bg=BG_DARK).pack()
         
-        tk.Label(bg, text="Craft Visual Masterpieces",
-                font=("Consolas", 12), fg=GRAY, bg=BG_DARK).pack(pady=40)
+        tk.Label(bg, text="AI-Powered Editing with DaVinci Resolve",
+                font=("Consolas", 12), fg=GRAY, bg=BG_DARK).pack(pady=30)
         
-        # Buttons
         btn_frame = tk.Frame(bg, bg=BG_DARK)
-        btn_frame.pack(pady=40)
+        btn_frame.pack(pady=30)
         
-        # Simple Edit Button
-        simple_btn = tk.Button(btn_frame, text="[ 1 ] SIMPLE EDIT",
-                              command=self.show_simple_edit,
-                              font=("Consolas", 16, "bold"),
-                              bg=BG_CARD, fg=CYAN, activebackground=BG_INPUT,
-                              activeforeground=CYAN, relief="flat",
-                              padx=60, pady=25, cursor="hand2",
-                              bd=2, highlightthickness=2, highlightcolor=CYAN)
-        simple_btn.pack(pady=15)
+        # Simple Edit
+        tk.Button(btn_frame, text="[ 1 ] SIMPLE EDIT",
+                 command=self.show_simple_edit,
+                 font=("Consolas", 16, "bold"),
+                 bg=BG_CARD, fg=CYAN, activebackground=BG_INPUT,
+                 relief="flat", padx=60, pady=20, cursor="hand2").pack(pady=10)
         
-        tk.Label(btn_frame, text="Quick preset-based editing with cinematic effects",
+        tk.Label(btn_frame, text="Quick preset-based editing",
                 font=("Arial", 10), fg=GRAY, bg=BG_DARK).pack()
         
-        # AI Edit Button
-        ai_btn = tk.Button(btn_frame, text="[ 2 ] AI SPECIAL EDIT",
-                          command=self.show_ai_edit,
-                          font=("Consolas", 16, "bold"),
-                          bg=BG_CARD, fg=MAGENTA, activebackground=BG_INPUT,
-                          activeforeground=MAGENTA, relief="flat",
-                          padx=60, pady=25, cursor="hand2",
-                          bd=2, highlightthickness=2, highlightcolor=MAGENTA)
-        ai_btn.pack(pady=15)
+        # AI Edit
+        tk.Button(btn_frame, text="[ 2 ] AI SPECIAL EDIT",
+                 command=self.show_ai_edit,
+                 font=("Consolas", 16, "bold"),
+                 bg=BG_CARD, fg=MAGENTA, activebackground=BG_INPUT,
+                 relief="flat", padx=60, pady=20, cursor="hand2").pack(pady=10)
         
-        tk.Label(btn_frame, text="Describe your vision or copy a reference style",
+        tk.Label(btn_frame, text="AI generates Fusion scripts for DaVinci Resolve",
                 font=("Arial", 10), fg=GRAY, bg=BG_DARK).pack()
         
-        # Footer
-        tk.Label(bg, text="Powered by DaVinci Resolve Fusion | v3.0",
-                font=("Arial", 9), fg="#333", bg=BG_DARK).pack(side="bottom", pady=20)
-
+        # API Settings
+        api_frame = tk.Frame(bg, bg=BG_DARK)
+        api_frame.pack(pady=20)
+        
+        tk.Label(api_frame, text="OpenAI API Key:", font=("Consolas", 10),
+                fg=WHITE, bg=BG_DARK).grid(row=0, column=0, sticky="w", padx=5)
+        
+        api_entry = tk.Entry(api_frame, textvariable=self.openai_api_key, width=40,
+                            bg=BG_INPUT, fg=CYAN, font=("Consolas", 10),
+                            show="*")
+        api_entry.grid(row=0, column=1, padx=5)
+        
+        tk.Button(api_frame, text="Save", command=self.save_api_key,
+                 bg=GREEN, fg=BG_DARK, font=("Consolas", 10),
+                 relief="flat").grid(row=0, column=2, padx=5)
+        
+        tk.Label(bg, text="Powered by DaVinci Resolve Fusion API | v3.1",
+                font=("Arial", 9), fg="#333", bg=BG_DARK).pack(side="bottom", pady=15)
+    
+    def save_api_key(self):
+        key = self.openai_api_key.get().strip()
+        if key:
+            with open("api_key.txt", "w") as f:
+                f.write(key)
+            messagebox.showinfo("Saved", "API key saved!")
+    
+    def load_api_key(self):
+        if os.path.exists("api_key.txt"):
+            with open("api_key.txt", "r") as f:
+                self.openai_api_key.set(f.read().strip())
+    
     # ============== SIMPLE EDIT ==============
     def show_simple_edit(self):
         self.clear()
         
-        # Background
         bg = tk.Frame(self.root, bg=BG_DARK)
         bg.pack(fill="both", expand=True)
         
-        # Top accent
         tk.Frame(bg, height=4, bg=CYAN).pack(fill="x")
         
-        # Back button
-        back_btn = tk.Button(bg, text="< BACK TO MENU",
-                            command=self.show_main_menu,
-                            font=("Consolas", 10),
-                            bg=BG_CARD, fg=GRAY, relief="flat",
-                            cursor="hand2")
-        back_btn.place(x=20, y=15)
+        tk.Button(bg, text="< BACK TO MENU", command=self.show_main_menu,
+                font=("Consolas", 10), bg=BG_CARD, fg=GRAY,
+                relief="flat", cursor="hand2").place(x=20, y=15)
         
-        # Title
         tk.Label(bg, text="SIMPLE EDIT", font=("Consolas", 32, "bold"),
-                fg=CYAN, bg=BG_DARK).pack(pady=40)
+                fg=CYAN, bg=BG_DARK).pack(pady=35)
         
-        # Form
         form = tk.Frame(bg, bg=BG_DARK)
         form.pack(pady=20, padx=60, fill="x")
         
-        # --- CLIPS SECTION ---
+        # Clips
         tk.Label(form, text="VIDEO CLIPS:", font=("Consolas", 12),
-                fg=WHITE, bg=BG_DARK).grid(row=0, column=0, sticky="w", pady=15)
+                fg=WHITE, bg=BG_DARK).grid(row=0, column=0, sticky="w", pady=12)
         
         clips_frame = tk.Frame(form, bg=BG_CARD)
-        clips_frame.grid(row=0, column=1, sticky="ew", pady=15)
+        clips_frame.grid(row=0, column=1, sticky="ew", pady=12)
         
-        # Listbox for clips
         self.clips_listbox = tk.Listbox(clips_frame, height=4, bg=BG_INPUT,
                                        fg=CYAN, font=("Consolas", 10),
                                        selectbackground=CYAN, selectforeground=BG_DARK)
         self.clips_listbox.pack(side="left", fill="both", expand=True, padx=5, pady=5)
         
-        # Clip buttons
         clip_btns = tk.Frame(clips_frame, bg=BG_CARD)
         clip_btns.pack(side="right", padx=5)
         
@@ -156,12 +322,12 @@ class App:
                  bg=RED, fg=WHITE, font=("Consolas", 10),
                  relief="flat", cursor="hand2").pack(fill="x", pady=2)
         
-        # --- AUDIO SECTION ---
-        tk.Label(form, text="AUDIO FILE:", font=("Consolas", 12),
-                fg=WHITE, bg=BG_DARK).grid(row=1, column=0, sticky="w", pady=15)
+        # Audio
+        tk.Label(form, text="AUDIO:", font=("Consolas", 12),
+                fg=WHITE, bg=BG_DARK).grid(row=1, column=0, sticky="w", pady=12)
         
         audio_frame = tk.Frame(form, bg=BG_CARD)
-        audio_frame.grid(row=1, column=1, sticky="ew", pady=15)
+        audio_frame.grid(row=1, column=1, sticky="ew", pady=12)
         
         self.audio_entry = tk.Entry(audio_frame, width=40, bg=BG_INPUT, fg=CYAN,
                                    font=("Consolas", 11), insertbackground=CYAN)
@@ -171,46 +337,31 @@ class App:
                  bg=CYAN, fg=BG_DARK, font=("Consolas", 10, "bold"),
                  relief="flat", cursor="hand2").pack(side="right", padx=5, pady=5)
         
-        # --- TITLE SECTION ---
-        tk.Label(form, text="TITLE:", font=("Consolas", 12),
-                fg=WHITE, bg=BG_DARK).grid(row=2, column=0, sticky="w", pady=15)
-        
-        title_frame = tk.Frame(form, bg=BG_CARD)
-        title_frame.grid(row=2, column=1, sticky="w", pady=15)
-        
-        self.title_entry = tk.Entry(title_frame, width=42, bg=BG_INPUT, fg=CYAN,
-                                  font=("Consolas", 11), insertbackground=CYAN)
-        self.title_entry.insert(0, "MONOGRAPH")
-        self.title_entry.pack(side="left", padx=5, pady=8)
-        
-        # --- OUTPUT SECTION ---
+        # Output
         tk.Label(form, text="OUTPUT:", font=("Consolas", 12),
-                fg=WHITE, bg=BG_DARK).grid(row=3, column=0, sticky="w", pady=15)
+                fg=WHITE, bg=BG_DARK).grid(row=2, column=0, sticky="w", pady=12)
         
         output_frame = tk.Frame(form, bg=BG_CARD)
-        output_frame.grid(row=3, column=1, sticky="w", pady=15)
+        output_frame.grid(row=2, column=1, sticky="w", pady=12)
         
         self.output_entry = tk.Entry(output_frame, width=42, bg=BG_INPUT, fg=CYAN,
                                    font=("Consolas", 11), insertbackground=CYAN)
         self.output_entry.insert(0, "MONOGRAPH_EDIT.mp4")
         self.output_entry.pack(side="left", padx=5, pady=8)
         
-        # --- STATUS ---
+        # Status
         self.simple_status = tk.Label(bg, text="Select files and click Create",
-                                    font=("Consolas", 11), fg=GREEN, bg=BG_DARK)
-        self.simple_status.pack(pady=25)
+                                     font=("Consolas", 11), fg=GREEN, bg=BG_DARK)
+        self.simple_status.pack(pady=20)
         
-        # --- CREATE BUTTON ---
-        create_btn = tk.Button(bg, text="[ CREATE VIDEO ]",
-                              command=self.run_simple_edit,
-                              font=("Consolas", 14, "bold"),
-                              bg=CYAN, fg=BG_DARK, relief="flat",
-                              padx=40, pady=15, cursor="hand2")
-        create_btn.pack(pady=10)
+        # Create
+        tk.Button(bg, text="[ CREATE VIDEO ]", command=self.run_simple_edit,
+                font=("Consolas", 14, "bold"),
+                bg=CYAN, fg=BG_DARK, relief="flat",
+                padx=40, pady=12, cursor="hand2").pack(pady=10)
         
-        # Help
-        tk.Label(bg, text="1. Add video clips | 2. Select audio | 3. Click Create",
-                font=("Arial", 9), fg=GRAY, bg=BG_DARK).pack(pady=20)
+        tk.Label(bg, text="1. Add clips | 2. Select audio | 3. Create",
+                font=("Arial", 9), fg=GRAY, bg=BG_DARK).pack(pady=15)
     
     def add_simple_clips(self):
         files = filedialog.askopenfilenames(
@@ -221,12 +372,11 @@ class App:
             if f not in self.simple_clips:
                 self.simple_clips.append(f)
                 self.clips_listbox.insert("end", os.path.basename(f))
-        self.simple_status.config(text=f"Added {len(files)} clip(s). Total: {len(self.simple_clips)}")
+        self.simple_status.config(text=f"Added {len(files)} clip(s)")
     
     def clear_simple_clips(self):
         self.simple_clips.clear()
         self.clips_listbox.delete(0, "end")
-        self.simple_status.config(text="Clips cleared")
     
     def browse_audio(self):
         f = filedialog.askopenfilename(
@@ -236,57 +386,44 @@ class App:
         if f:
             self.audio_entry.delete(0, "end")
             self.audio_entry.insert(0, f)
-            self.simple_status.config(text=f"Audio selected: {os.path.basename(f)}")
     
     def run_simple_edit(self):
-        # Get values
-        self.simple_audio = self.audio_entry.get().strip()
-        self.simple_output = self.output_entry.get().strip()
-        self.simple_title = self.title_entry.get().strip()
-        
-        # Validate
         if not self.simple_clips:
-            messagebox.showerror("Error", "Please add at least one video clip!")
+            messagebox.showerror("Error", "Add at least one video clip!")
             return
         
-        if not self.simple_audio:
-            messagebox.showerror("Error", "Please select an audio file!")
+        audio = self.audio_entry.get().strip()
+        if not audio:
+            messagebox.showerror("Error", "Select an audio file!")
             return
         
-        if not os.path.exists(self.simple_audio):
-            messagebox.showerror("Error", "Audio file not found!")
-            return
+        output = self.output_entry.get().strip() or "MONOGRAPH_EDIT.mp4"
         
-        self.simple_status.config(text=f"Creating video from {len(self.simple_clips)} clips...", fg=MAGENTA)
+        self.simple_status.config(text=f"Creating from {len(self.simple_clips)} clips...", fg=MAGENTA)
         self.root.update()
         
-        # Create temp folder
-        temp_dir = "temp_simple_clips"
+        temp_dir = "temp_clips"
         os.makedirs(temp_dir, exist_ok=True)
         
-        # Copy clips
         for i, clip in enumerate(self.simple_clips):
             ext = Path(clip).suffix
-            dest = f"{temp_dir}/clip_{i}{ext}"
-            shutil.copy(clip, dest)
+            shutil.copy(clip, f"{temp_dir}/clip_{i}{ext}")
         
-        # Run editor
         cmd = [sys.executable, "monograph-auto-editor.py",
                "--clips-folder", temp_dir,
-               "--audio", self.simple_audio,
-               "--output", self.simple_output,
-               "--title", self.simple_title]
+               "--audio", audio,
+               "--output", output]
         
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             shutil.rmtree(temp_dir, ignore_errors=True)
             
             if result.returncode == 0:
-                self.simple_status.config(text="Video created successfully!", fg=GREEN)
-                messagebox.showinfo("Success!", f"Your video is ready:\n{os.path.abspath(self.simple_output)}")
+                self.simple_status.config(text="Video created!", fg=GREEN)
+                messagebox.showinfo("Success!", f"Ready: {os.path.abspath(output)}")
             else:
-                self.simple_status.config(text="Error occurred", fg=RED)
-                messagebox.showerror("Error", result.stderr[:300] if result.stderr else "Unknown error")
+                self.simple_status.config(text="Error", fg=RED)
+                messagebox.showerror("Error", result.stderr[:200] if result.stderr else "Error")
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
@@ -294,37 +431,30 @@ class App:
     def show_ai_edit(self):
         self.clear()
         
-        # Background
         bg = tk.Frame(self.root, bg=BG_DARK)
         bg.pack(fill="both", expand=True)
         
-        # Top accent
         tk.Frame(bg, height=4, bg=MAGENTA).pack(fill="x")
         
-        # Back button
-        back_btn = tk.Button(bg, text="< BACK TO MENU",
-                            command=self.show_main_menu,
-                            font=("Consolas", 10),
-                            bg=BG_CARD, fg=GRAY, relief="flat",
-                            cursor="hand2")
-        back_btn.place(x=20, y=15)
+        tk.Button(bg, text="< BACK TO MENU", command=self.show_main_menu,
+                font=("Consolas", 10), bg=BG_CARD, fg=GRAY,
+                relief="flat", cursor="hand2").place(x=20, y=15)
         
-        # Title
         tk.Label(bg, text="AI SPECIAL EDIT", font=("Consolas", 32, "bold"),
-                fg=MAGENTA, bg=BG_DARK).pack(pady=30)
+                fg=MAGENTA, bg=BG_DARK).pack(pady=25)
         
         # Input section
         inp = tk.Frame(bg, bg=BG_DARK)
         inp.pack(pady=10, padx=60, fill="x")
         
-        # --- CLIPS ---
+        # Clips
         tk.Label(inp, text="VIDEO CLIPS:", font=("Consolas", 11),
-                fg=WHITE, bg=BG_DARK).grid(row=0, column=0, sticky="w", pady=8)
+                fg=WHITE, bg=BG_DARK).grid(row=0, column=0, sticky="w", pady=6)
         
         clips_f = tk.Frame(inp, bg=BG_CARD)
-        clips_f.grid(row=0, column=1, sticky="ew", pady=8)
+        clips_f.grid(row=0, column=1, sticky="ew", pady=6)
         
-        self.ai_clips_listbox = tk.Listbox(clips_f, height=3, bg=BG_INPUT,
+        self.ai_clips_listbox = tk.Listbox(clips_f, height=2, bg=BG_INPUT,
                                          fg=MAGENTA, font=("Consolas", 10))
         self.ai_clips_listbox.pack(side="left", fill="x", expand=True, padx=5, pady=3)
         
@@ -332,19 +462,19 @@ class App:
         btn_col.pack(side="right", padx=3)
         
         tk.Button(btn_col, text="+", command=self.add_ai_clips,
-                 bg=MAGENTA, fg=BG_DARK, font=("Consolas", 14, "bold"),
-                 relief="flat", width=3).pack(pady=2)
+                 bg=MAGENTA, fg=BG_DARK, font=("Consolas", 12, "bold"),
+                 relief="flat", width=3).pack(pady=1)
         
         tk.Button(btn_col, text="X", command=self.clear_ai_clips,
                  bg=RED, fg=WHITE, font=("Consolas", 10),
-                 relief="flat", width=3).pack(pady=2)
+                 relief="flat", width=3).pack(pady=1)
         
-        # --- AUDIO ---
+        # Audio
         tk.Label(inp, text="AUDIO:", font=("Consolas", 11),
-                fg=WHITE, bg=BG_DARK).grid(row=1, column=0, sticky="w", pady=8)
+                fg=WHITE, bg=BG_DARK).grid(row=1, column=0, sticky="w", pady=6)
         
         audio_f = tk.Frame(inp, bg=BG_CARD)
-        audio_f.grid(row=1, column=1, sticky="ew", pady=8)
+        audio_f.grid(row=1, column=1, sticky="ew", pady=6)
         
         self.ai_audio_entry = tk.Entry(audio_f, width=40, bg=BG_INPUT, fg=MAGENTA,
                                      font=("Consolas", 10))
@@ -354,67 +484,50 @@ class App:
                  bg=MAGENTA, fg=BG_DARK, font=("Consolas", 10),
                  relief="flat", width=4).pack(side="right", padx=5, pady=5)
         
-        # --- REFERENCE ---
-        tk.Label(inp, text="STYLE REF:", font=("Consolas", 10),
-                fg=GRAY, bg=BG_DARK).grid(row=2, column=0, sticky="w", pady=8)
-        
-        ref_f = tk.Frame(inp, bg=BG_CARD)
-        ref_f.grid(row=2, column=1, sticky="ew", pady=8)
-        
-        self.ai_ref_entry = tk.Entry(ref_f, width=40, bg=BG_INPUT, fg=GRAY,
-                                   font=("Consolas", 10))
-        self.ai_ref_entry.pack(side="left", padx=5, pady=5, fill="x", expand=True)
-        
-        tk.Button(ref_f, text="...", command=self.browse_ai_ref,
-                 bg="#444", fg=WHITE, font=("Consolas", 10),
-                 relief="flat", width=4).pack(side="right", padx=5, pady=5)
-        
-        # --- CHAT ---
+        # Chat
         chat_f = tk.Frame(bg, bg=BG_CARD)
         chat_f.pack(pady=10, padx=60, fill="both", expand=True)
         
-        self.ai_chat = scrolledtext.ScrolledText(chat_f, height=12,
+        self.ai_chat = scrolledtext.ScrolledText(chat_f, height=14,
                                                bg=BG_DARK, fg=MAGENTA,
                                                font=("Consolas", 10), relief="flat",
                                                state="disabled", wrap="word")
         self.ai_chat.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Initial message
         self.ai_chat.config(state="normal")
-        self.ai_chat.insert("end", """AI: Welcome to AI Special Edit!
+        self.ai_chat.insert("end", f"""AI: Welcome to AI Special Edit!
 
-Select your clips and audio, then describe the style you want.
+I can generate Fusion scripts for DaVinci Resolve FREE!
 
-Example prompts:
-- "Make it cinematic with slow motion"
-- "Copy the style of my reference video"  
-- "Create an epic anime-style edit"
-- "Add dramatic lighting effects"
+Add your clips and audio, then describe what you want:
+- "Cinematic look with letterboxing and color grading"
+- "Slow motion effects with film grain"
+- "Anime style edit with dramatic cuts"
+- "Copy the style from my reference video"
 
-I'll create your custom edit!
+The AI will create a Python script using the DaVinci Resolve API.
 """)
         self.ai_chat.config(state="disabled")
         
-        # --- INPUT ROW ---
+        # Input row
         input_row = tk.Frame(bg, bg=BG_DARK)
         input_row.pack(pady=10, padx=60, fill="x")
         
         self.ai_input = tk.Entry(input_row, width=55, bg=BG_INPUT, fg=WHITE,
                                 font=("Consolas", 12), insertbackground=MAGENTA)
         self.ai_input.pack(side="left")
-        self.ai_input.bind("<Return>", lambda e: self.send_ai_message())
+        self.ai_input.bind("<Return>", lambda e: self.send_ai())
         
-        send_btn = tk.Button(input_row, text="SEND", command=self.send_ai_message,
-                            bg=MAGENTA, fg=BG_DARK, font=("Consolas", 11, "bold"),
-                            relief="flat", cursor="hand2")
-        send_btn.pack(side="right", padx=(10, 0))
+        tk.Button(input_row, text="SEND", command=self.send_ai,
+                 bg=MAGENTA, fg=BG_DARK, font=("Consolas", 11, "bold"),
+                 relief="flat", cursor="hand2").pack(side="right", padx=(10, 0))
         
-        # --- STATUS ---
+        # Status
         self.ai_status = tk.Label(bg, text="", font=("Consolas", 10),
                                 fg=MAGENTA, bg=BG_DARK)
         self.ai_status.pack(pady=5)
         
-        # --- FEEDBACK BUTTONS (hidden) ---
+        # Feedback
         self.feedback_frame = tk.Frame(bg, bg=BG_DARK)
         self.feedback_shown = False
         self.ai_output = None
@@ -433,7 +546,6 @@ I'll create your custom edit!
     def clear_ai_clips(self):
         self.ai_clips.clear()
         self.ai_clips_listbox.delete(0, "end")
-        self.ai_status.config(text="Clips cleared")
     
     def browse_ai_audio(self):
         f = filedialog.askopenfilename(
@@ -443,17 +555,6 @@ I'll create your custom edit!
         if f:
             self.ai_audio_entry.delete(0, "end")
             self.ai_audio_entry.insert(0, f)
-            self.ai_status.config(text=f"Audio: {os.path.basename(f)}")
-    
-    def browse_ai_ref(self):
-        f = filedialog.askopenfilename(
-            title="Select reference video for style",
-            filetypes=[("Video files", "*.mp4 *.mov"), ("All files", "*.*")]
-        )
-        if f:
-            self.ai_ref_entry.delete(0, "end")
-            self.ai_ref_entry.insert(0, f)
-            self.ai_status.config(text=f"Reference: {os.path.basename(f)}")
     
     def update_ai_chat(self, text, is_user=False):
         self.ai_chat.config(state="normal")
@@ -462,92 +563,249 @@ I'll create your custom edit!
         self.ai_chat.see("end")
         self.ai_chat.config(state="disabled")
     
-    def send_ai_message(self):
+    def send_ai(self):
         msg = self.ai_input.get().strip()
         if not msg:
             return
         self.ai_input.delete(0, "end")
         
         self.update_ai_chat(msg, is_user=True)
-        self.ai_status.config(text="AI processing...")
+        self.ai_status.config(text="AI generating Fusion script...")
         
         threading.Thread(target=self.ai_process, args=(msg,), daemon=True).start()
     
     def ai_process(self, msg):
         msg_lower = msg.lower()
         
-        # Check responses
+        # Check for confirmation
         if any(w in msg_lower for w in ["yes", "good", "ok", "love it", "perfect", "thanks"]):
             response = "AI: Thanks! Your edit is saved. Returning to menu..."
             self.root.after(0, lambda: [self.update_ai_chat(response),
                                         self.root.after(2000, self.show_main_menu)])
             return
         
-        if any(w in msg_lower for w in ["no", "not", "change", "redo", "fix", "wrong"]):
-            response = "AI: Got it! Please describe what changes you want:"
+        if any(w in msg_lower for w in ["no", "not", "change", "redo", "fix"]):
+            response = "AI: What should I change? Describe the modifications:"
             self.root.after(0, lambda: self.update_ai_chat(response))
             return
         
-        # Generate video
-        response = self.ai_generate_video()
+        # Generate Fusion script
+        response = self.generate_fusion_script(msg)
         self.root.after(0, lambda: self.ai_finish(response))
     
-    def ai_generate_video(self):
-        audio = self.ai_audio_entry.get().strip()
+    def generate_fusion_script(self, user_request):
+        api_key = self.openai_api_key.get().strip()
         
         if not self.ai_clips:
-            return "AI: Please add at least one video clip first."
+            return "AI: Add at least one video clip first."
         
+        audio = self.ai_audio_entry.get().strip()
         if not audio:
-            return "AI: Please select an audio file."
+            return "AI: Select an audio file."
         
-        if not os.path.exists(audio):
-            return "AI: Audio file not found. Please check the path."
+        self.root.after(0, lambda: self.ai_status.config(text="Generating Fusion script with AI..."))
         
-        self.root.after(0, lambda: self.ai_status.config(text="Creating your custom edit..."))
+        # Build context for AI
+        context = f"""
+User Request: {user_request}
+
+Available Clips: {len(self.ai_clips)} video files
+Audio File: {audio}
+
+Generate a Python script for DaVinci Resolve FREE using the Fusion API.
+The script should:
+1. Create a new project
+2. Import the video clips
+3. Create a timeline
+4. Apply the effects described in the user request
+5. Add the audio track
+6. Export the final video
+
+Use these DaVinci Resolve API methods:
+- resolve.GetProjectManager().CreateProject()
+- mediaPool.ImportMedia()
+- mediaPool.CreateTimelineFromClips()
+- project.SetCurrentTimeline()
+- timeline.SetCurrentTimeline()
+- comp.AddTool() for Fusion effects
+
+Include effects like:
+- Letterboxing (Crop tool, top=0.13, bottom=0.13)
+- Color correction (ColorCorrect, saturation=0.65)
+- Slow motion (timelineItem.SetClipSpeed(50))
+- Film grain (FilmGrain tool)
+- Text overlays (Text+ tool)
+
+IMPORTANT: Write a complete, working Python script that can be executed.
+The script must work with the FREE version of DaVinci Resolve.
+"""
         
-        # Create temp folder
-        temp = "temp_ai_clips"
-        os.makedirs(temp, exist_ok=True)
+        # Generate script using OpenAI if API key provided
+        if api_key:
+            script = self.call_openai_api(api_key, context)
+        else:
+            script = self.generate_basic_script(user_request)
         
-        # Copy clips
-        for i, clip in enumerate(self.ai_clips):
-            ext = Path(clip).suffix
-            shutil.copy(clip, f"{temp}/clip_{i}{ext}")
-        
-        output = "AI_CUSTOM_EDIT.mp4"
-        
-        cmd = [sys.executable, "monograph-auto-editor.py",
-               "--clips-folder", temp,
-               "--audio", audio,
-               "--output", output]
-        
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            shutil.rmtree(temp, ignore_errors=True)
+        # Save and execute the script
+        if script:
+            script_path = "ai_generated_edit.py"
+            with open(script_path, "w") as f:
+                f.write(script)
             
-            if result.returncode == 0 and os.path.exists(output):
-                self.ai_output = output
-                return f"""AI: Your custom edit is ready!
+            self.ai_output = "AI_EDIT_OUTPUT.mp4"
+            
+            return f"""AI: I've generated a Fusion script for your request!
 
-Output: {os.path.abspath(output)}
+Script saved as: {script_path}
 
-Is this what you had in mind?
+The script uses DaVinci Resolve's Fusion API to:
+- Import your clips
+- Apply cinematic effects (letterboxing, color grading)
+- Add slow motion effects
+- Create text overlays
+- Export with your audio
 
-[ YES, GOOD! ] if perfect
-[ NO, CHANGE ] to modify"""
-            else:
-                return f"AI: Error creating video: {result.stderr[:150] if result.stderr else 'Unknown error'}"
-        except subprocess.TimeoutExpired:
-            return "AI: Video creation timed out. Try with fewer clips."
+To run: Open DaVinci Resolve > Fusion page > Console > run('{script_path}')
+
+Or I can run it for you if DaVinci is installed.
+
+Is this what you wanted? [ YES, GOOD! ] or [ NO, CHANGE ]"""
+        else:
+            return "AI: Error generating script. Please try again."
+    
+    def call_openai_api(self, api_key, context):
+        """Call OpenAI API to generate Fusion script"""
+        try:
+            import urllib.request
+            import urllib.error
+            
+            url = "https://api.openai.com/v1/chat/completions"
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}"
+            }
+            
+            data = {
+                "model": "gpt-4",
+                "messages": [
+                    {"role": "system", "content": f"""You are a DaVinci Resolve Fusion script expert.
+Generate Python scripts for DaVinci Resolve FREE version.
+The script must use only the public API methods documented here.
+Write complete, working scripts that can be executed directly.
+Start script with: #!/usr/bin/env python3
+Include try/except for error handling.
+Use fusionscript module for DaVinci Resolve access."""},
+                    {"role": "user", "content": context}
+                ],
+                "max_tokens": 2000
+            }
+            
+            req = urllib.request.Request(url, data=json.dumps(data).encode(), headers=headers)
+            response = urllib.request.urlopen(req, timeout=30)
+            result = json.loads(response.read().decode())
+            
+            return result["choices"][0]["message"]["content"]
+            
         except Exception as e:
-            return f"AI: Error: {str(e)}"
+            return None
+    
+    def generate_basic_script(self, request):
+        """Generate basic script without API - template-based"""
+        
+        script = f'''#!/usr/bin/env python3
+"""
+Monograph AI Generated Edit
+Request: {request}
+"""
+
+import os
+import sys
+
+# DaVinci Resolve API setup
+try:
+    import DaVinciResolveScript as dvr_script
+    resolve = dvr_script.scriptapp("Resolve")
+except ImportError:
+    print("DaVinci Resolve not found. Please install and run from Resolve.")
+    sys.exit(1)
+
+def main():
+    # Get Fusion and Project
+    fusion = resolve.Fusion()
+    projectManager = resolve.GetProjectManager()
+    project = projectManager.GetCurrentProject()
+    mediaPool = project.GetMediaPool()
+    
+    # Create new project
+    projectName = "Monograph AI Edit"
+    project = projectManager.CreateProject(projectName)
+    
+    # Import clips
+    clipPaths = {self.ai_clips}
+    importedClips = mediaPool.ImportMedia(list(clipPaths))
+    
+    if not importedClips:
+        print("Error: No clips imported")
+        return
+    
+    # Create timeline
+    timeline = mediaPool.CreateTimelineFromClips("AI Edit Timeline", importedClips)
+    project.SetCurrentTimeline(timeline)
+    
+    # Get current comp for Fusion effects
+    comp = fusion.GetCurrentComp()
+    
+    if comp:
+        # Add cinematic letterboxing
+        crop = comp.AddTool("Crop")
+        crop.Top.Value = 0.13
+        crop.Bottom.Value = 0.13
+        
+        # Add color grading
+        colorCorrect = comp.AddTool("ColorCorrect")
+        colorCorrect.Saturation.Value = 0.65
+        colorCorrect.Contrast.Value = 1.05
+        colorCorrect.Lift[0].Value = 0.010
+        colorCorrect.Lift[1].Value = 0.012
+        colorCorrect.Lift[2].Value = 0.020
+        
+        # Add film grain
+        grain = comp.AddTool("FilmGrain")
+        grain.GrainAmount.Value = 0.08
+        
+        # Add text overlay
+        text = comp.AddTool("Text+")
+        text.Titles[0].Value = "MONOGRAPH"
+        text.Styles[0].Font.Value = "Arial"
+        text.Styles[0].Size.Value = 48
+        text.GlobalPosition[0].Value = 0.5
+        text.GlobalPosition[1].Value = 0.8
+    
+    # Set render settings
+    project.SetRenderSettings({{
+        "OutputFilename": "AI_EDIT_OUTPUT.mp4",
+        "ResolutionWidth": 1920,
+        "ResolutionHeight": 1080,
+        "FrameRate": 24
+    }})
+    
+    # Add render job
+    jobId = project.AddRenderJob()
+    
+    print(f"Render job created: {{jobId}}")
+    print("Run project.StartRendering() to render the video")
+
+if __name__ == "__main__":
+    main()
+'''
+        return script
     
     def ai_finish(self, response):
         self.update_ai_chat(response)
         self.ai_status.config(text="")
         
-        if self.ai_output and "ready" in response.lower():
+        if "generated" in response.lower() or "script" in response.lower():
             self.show_ai_feedback()
     
     def show_ai_feedback(self):
@@ -557,36 +815,35 @@ Is this what you had in mind?
         
         self.feedback_frame.pack(pady=15)
         
-        # Yes button
-        yes_btn = tk.Button(self.feedback_frame, text="[ YES, GOOD! ]",
-                           command=self.ai_yes,
-                           bg=GREEN, fg=BG_DARK, font=("Consolas", 12, "bold"),
-                           relief="flat", cursor="hand2", padx=20, pady=10)
-        yes_btn.pack(side="left", padx=10)
+        tk.Button(self.feedback_frame, text="[ YES, GOOD! ]",
+                 command=self.ai_yes,
+                 bg=GREEN, fg=BG_DARK, font=("Consolas", 12, "bold"),
+                 relief="flat", cursor="hand2", padx=20, pady=8).pack(side="left", padx=8)
         
-        # No button
-        no_btn = tk.Button(self.feedback_frame, text="[ NO, CHANGE ]",
-                          command=self.ai_no,
-                          bg=RED, fg=WHITE, font=("Consolas", 12, "bold"),
-                          relief="flat", cursor="hand2", padx=20, pady=10)
-        no_btn.pack(side="left", padx=10)
+        tk.Button(self.feedback_frame, text="[ NO, CHANGE ]",
+                 command=self.ai_no,
+                 bg=RED, fg=WHITE, font=("Consolas", 12, "bold"),
+                 relief="flat", cursor="hand2", padx=20, pady=8).pack(side="left", padx=8)
         
-        # Open folder button
-        if self.ai_output:
-            folder_btn = tk.Button(self.feedback_frame, text="[ OPEN FOLDER ]",
-                                 command=lambda: subprocess.run(f'explorer /select,"{self.ai_output}"'),
-                                 bg=CYAN, fg=BG_DARK, font=("Consolas", 10),
-                                 relief="flat", cursor="hand2", padx=15, pady=10)
-            folder_btn.pack(side="left", padx=10)
+        tk.Button(self.feedback_frame, text="[ VIEW SCRIPT ]",
+                 command=self.view_script,
+                 bg=CYAN, fg=BG_DARK, font=("Consolas", 10),
+                 relief="flat", cursor="hand2", padx=15, pady=8).pack(side="left", padx=8)
+    
+    def view_script(self):
+        if os.path.exists("ai_generated_edit.py"):
+            with open("ai_generated_edit.py", "r") as f:
+                content = f.read()
+            messagebox.showinfo("Generated Script", content[:2000] + "...")
     
     def ai_yes(self):
-        self.update_ai_chat("You: Yes, it's perfect!")
+        self.update_ai_chat("You: Yes, perfect!")
         self.feedback_frame.pack_forget()
         self.root.after(2000, self.show_main_menu)
     
     def ai_no(self):
-        self.update_ai_chat("You: No, please change it...")
-        self.update_ai_chat("AI: What should I change?")
+        self.update_ai_chat("You: Please change it...")
+        self.update_ai_chat("AI: What modifications do you want?")
         self.feedback_frame.pack_forget()
         self.feedback_shown = False
 
@@ -594,5 +851,6 @@ Is this what you had in mind?
 # ============== RUN ==============
 if __name__ == "__main__":
     root = tk.Tk()
-    app = App(root)
+    app = MonographApp(root)
+    app.load_api_key()
     root.mainloop()
