@@ -1,20 +1,7 @@
-# 🎬 MONOGRAPH AUTO-EDITOR - POST READY IN 3 STEPS
+# 🎬 monograph editor 
 
-## WHAT THIS DOES
 
-Automatically creates professional "monograph style" edits like the ones you referenced:
-- ✅ Cinematic letterboxing (2.35:1 film bars)
-- ✅ Moody color grading (teal shadows, warm highlights)
-- ✅ Slow motion effects
-- ✅ Beat-synced edits
-- ✅ Text overlays
-- ✅ Film grain effect
-- ✅ Fade in/out
-- ✅ Ready to POST
-
----
-
-## ⚡ QUICK START (Just do these 3 things)
+## ⚡ QUICK START
 
 ### Step 1: Add your video clips
 ```
@@ -57,7 +44,7 @@ your-folder/
 
 ---
 
-## 🎨 CUSTOMIZATION (Optional)
+## 🎨 CUSTOMIZATION
 
 Edit `monograph-auto-editor.py` to change:
 
@@ -100,7 +87,7 @@ Your `FINAL_MONOGRAPH_EDIT.mp4` is optimized for:
 - ✅ Instagram Reels
 - ✅ Twitter/X
 - ✅ Facebook
-- ✅ Any platform!
+
 
 ---
 
