@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MONOGRAPH EDITOR v4.1 - Fixed DaVinci Resolve Integration
+MONOGRAPH EDITOR v4.2 - Fixed Script Generation
 """
 
 import os, sys, tkinter as tk
@@ -11,18 +11,17 @@ import subprocess, threading, shutil, json, urllib.request
 BG_DARK, BG_CARD, BG_INPUT = "#050510", "#0a0a1a", "#12122a"
 CYAN, MAGENTA, GREEN, RED, ORANGE, WHITE, GRAY = "#00f5ff", "#ff00aa", "#00ff88", "#ff3366", "#ff9500", "#ffffff", "#666688"
 
-DAVINCI_SCRIPT = '''#!/usr/bin/env python3
+DAVINCI_SCRIPT = r'''#!/usr/bin/env python3
 """
 Monograph AI Generated Edit for DaVinci Resolve
-Paste this into Fusion Console
+Paste into Fusion Console
 """
 import sys, os
 
-# Windows API setup
 if sys.platform == "win32":
-    api_path = os.environ.get("RESOLVE_SCRIPT_API", "C:\\\\ProgramData\\\\Blackmagic Design\\\\DaVinci Resolve\\\\Support\\\\Developer\\\\Scripting")
+    api_path = "C:\\ProgramData\\Blackmagic Design\\DaVinci Resolve\\Support\\Developer\\Scripting"
     if os.path.exists(api_path):
-        sys.path.insert(0, api_path + "\\\\Modules")
+        sys.path.insert(0, api_path + "\\Modules")
 
 try:
     import DaVinciResolveScript as dvr_script
@@ -40,9 +39,10 @@ project = projectManager.CreateProject("Monograph AI Edit")
 mediaPool = project.GetMediaPool()
 
 # Import clips
-clips = {clips_list}
-if clips:
-    imported = mediaPool.ImportMedia(clips)
+CLIPS = [CLIPS_PLACEHOLDER]
+
+if CLIPS:
+    imported = mediaPool.ImportMedia(CLIPS)
     if imported:
         print(f"Imported {len(imported)} clips")
         timeline = mediaPool.CreateTimelineFromClips("AI Edit", imported)
@@ -56,6 +56,7 @@ if clips:
                 crop.Top.Value = 0.13
                 crop.Bottom.Value = 0.13
                 print("- Letterbox applied")
+                
                 # Color grade
                 cc = comp.AddTool("ColorCorrect")
                 cc.Saturation.Value = 0.65
@@ -64,10 +65,12 @@ if clips:
                 cc.Lift[1].Value = 0.012
                 cc.Lift[2].Value = 0.020
                 print("- Color grading applied")
+                
                 # Film grain
                 grain = comp.AddTool("FilmGrain")
                 grain.GrainAmount.Value = 0.08
                 print("- Film grain applied")
+                
                 # Text
                 text = comp.AddTool("Text+")
                 text.Titles[0].Value = "MONOGRAPH"
@@ -83,7 +86,7 @@ print("Effects applied! Go to Deliver page to render.")
 class Updater:
     def __init__(self):
         self.repo = "nop727272/somepython-experiment"
-        self.version = "4.1.0"
+        self.version = "4.2.0"
         self.has_update = False
     
     def check(self):
@@ -102,7 +105,7 @@ class Updater:
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("MONOGRAPH EDITOR v4.1")
+        self.root.title("MONOGRAPH EDITOR v4.2")
         self.root.geometry("1000x800")
         self.root.configure(bg=BG_DARK)
         self.updater = Updater()
@@ -186,7 +189,7 @@ class App:
         tk.Button(f, text="[ 2 ] AI SPECIAL EDIT", command=self.show_ai,
                  font=("Consolas", 16, "bold"), bg=BG_CARD, fg=MAGENTA,
                  activebackground=BG_INPUT, relief="flat", padx=60, pady=20, cursor="hand2").pack(pady=8)
-        tk.Label(f, text="GPT-4 generates DaVinci Resolve scripts",
+        tk.Label(f, text="Generate DaVinci Resolve Fusion scripts",
                 font=("Arial", 10), fg=GRAY, bg=BG_DARK).pack()
         
         # API Key
@@ -199,7 +202,7 @@ class App:
         tk.Button(kf, text="Save", command=self.save_key, bg=GREEN, fg=BG_DARK,
                  font=("Consolas", 10), relief="flat").grid(row=0, column=2, padx=5)
         
-        tk.Label(bg, text="v4.1.0 | DaVinci Resolve Fusion API",
+        tk.Label(bg, text="v4.2.0 | DaVinci Resolve Fusion API",
                 font=("Arial", 9), fg="#333", bg=BG_DARK).pack(side="bottom", pady=12)
     
     # ============== SIMPLE EDIT ==============
@@ -343,15 +346,6 @@ class App:
         tk.Button(af, text="...", command=lambda: self.browse_ai_audio(),
                  bg=MAGENTA, fg=BG_DARK, font=("Consolas", 10), relief="flat", width=4).pack(side="right", padx=5, pady=5)
         
-        # Prompt
-        tk.Label(inp, text="PROMPT:", font=("Consolas", 11),
-                fg=MAGENTA, bg=BG_DARK).grid(row=2, column=0, sticky="w", pady=5)
-        pf = tk.Frame(inp, bg=BG_CARD)
-        pf.grid(row=2, column=1, sticky="ew", pady=5)
-        self.ai_prompt = tk.Entry(pf, width=40, bg=BG_INPUT, fg=MAGENTA, font=("Consolas", 10))
-        self.ai_prompt.insert(0, "Cinematic with letterboxing and color grading")
-        self.ai_prompt.pack(side="left", padx=5, pady=5, fill="x", expand=True)
-        
         # Chat
         chat = tk.Frame(bg, bg=BG_CARD)
         chat.pack(pady=10, padx=60, fill="both", expand=True)
@@ -366,16 +360,15 @@ I generate DaVinci Resolve Fusion scripts!
 
 1. Add video clips (+)
 2. Select audio (...)
-3. Type your prompt
-4. Click SEND TO AI
+3. Click GENERATE SCRIPT
 
-EXAMPLES:
-- "Cinematic with 2.35:1 letterboxing"
-- "Slow motion with film grain"
-- "Teal shadows and warm highlights"
-- "Anime style edit"
+Effects included:
+- Letterbox (2.35:1)
+- Color grading
+- Film grain
+- Text overlay
 
-Script will be saved as: monograph_ai_script.py
+The script will be saved as: monograph_ai_script.py
 """)
         self.ai_chat.config(state="disabled")
         
@@ -386,7 +379,7 @@ Script will be saved as: monograph_ai_script.py
                                font=("Consolas", 12), insertbackground=MAGENTA)
         self.ai_input.pack(side="left")
         self.ai_input.bind("<Return>", lambda e: self.send_ai())
-        tk.Button(ir, text="SEND TO AI", command=self.send_ai,
+        tk.Button(ir, text="GENERATE SCRIPT", command=self.send_ai,
                  bg=MAGENTA, fg=BG_DARK, font=("Consolas", 11, "bold"),
                  relief="flat", cursor="hand2").pack(side="right", padx=(10, 0))
         
@@ -417,9 +410,9 @@ Script will be saved as: monograph_ai_script.py
         self.ai_chat.config(state="disabled")
     
     def send_ai(self):
-        msg = self.ai_input.get().strip() or self.ai_prompt.get().strip()
+        msg = self.ai_input.get().strip()
         if not msg:
-            return
+            msg = "Generate cinematic edit"
         self.ai_input.delete(0, "end")
         self.update_chat(msg, user=True)
         self.ai_status.config(text="Generating...")
@@ -447,8 +440,11 @@ Script will be saved as: monograph_ai_script.py
         if not self.ai_audio.get().strip():
             return "AI: Select audio first!"
         
-        clips_str = str(self.ai_clips).replace("\\", "\\\\")
-        script = DAVINCI_SCRIPT.format(clips_list=clips_str)
+        # Create clips list string
+        clips_list = "[" + ", ".join([f'"{c}"' for c in self.ai_clips]) + "]"
+        
+        # Replace placeholder
+        script = DAVINCI_SCRIPT.replace("CLIPS_PLACEHOLDER", clips_list)
         
         path = "monograph_ai_script.py"
         with open(path, "w") as f:
@@ -462,8 +458,9 @@ TO USE IN DAVINCI RESOLVE:
 1. Open DaVinci Resolve
 2. Go to Fusion page
 3. View > Console
-4. Type: exec(open('{path}').read())
-5. Press Enter
+4. Copy ALL text from {path}
+5. Paste into Console
+6. Press Enter
 
 Effects included:
 - Letterbox (2.35:1)
@@ -471,7 +468,7 @@ Effects included:
 - Film grain
 - Text overlay
 
-Is this good? [YES] or [NO, CHANGE]"""
+Is this good? [YES, GOOD!] or [NO, CHANGE]"""
     
     def finish_ai(self, resp):
         self.update_chat(resp)
