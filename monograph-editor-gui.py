@@ -46,7 +46,7 @@ class MonographEditorGUI:
                 font=("Arial", 11)).grid(row=row, column=0, sticky="w", pady=10)
         
         frame = tk.Frame(main_frame, bg="#16213e")
-        frame.grid(row=row, column=1, sticky="ew", pady=10, padx(5, 0))
+        frame.grid(row=row, column=1, sticky="ew", pady=10, padx=5)
         
         tk.Entry(frame, textvariable=self.clips_folder, width=30, bg="#0f3460", 
                 fg="#fff", insertbackground="#fff").pack(side="left", padx=5, pady=5)
@@ -60,7 +60,7 @@ class MonographEditorGUI:
                 font=("Arial", 11)).grid(row=row, column=0, sticky="w", pady=10)
         
         frame = tk.Frame(main_frame, bg="#16213e")
-        frame.grid(row=row, column=1, sticky="ew", pady=10, padx(5, 0))
+        frame.grid(row=row, column=1, sticky="ew", pady=10, padx=5)
         
         tk.Entry(frame, textvariable=self.audio_file, width=30, bg="#0f3460", 
                 fg="#fff", insertbackground="#fff").pack(side="left", padx=5, pady=5)
