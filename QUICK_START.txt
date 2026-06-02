@@ -1,0 +1,56 @@
+╔════════════════════════════════════════════════════════════════╗
+║           MONOGRAPH AUTO-EDITOR - READY TO POST                 ║
+╚════════════════════════════════════════════════════════════════╝
+
+POST YOUR VIDEO IN 3 STEPS:
+
+1️⃣  PUT CLIPS IN `clips/` FOLDER
+    → Add your .mp4, .mov, or .avi files
+    
+2️⃣  ADD YOUR SONG AS `audio.mp3`
+    → Download "Feel Good Inc" or any song
+    
+3️⃣  RUN: ./run_edit.sh
+    → Wait for processing...
+    → Get: FINAL_MONOGRAPH_EDIT.mp4
+    
+4️⃣  POST IT!
+    → Upload directly to YouTube, TikTok, Instagram, etc.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FILES YOU NEED TO ADD:
+  📁 clips/        → Your video clips (as many as you want)
+  🎵 audio.mp3     → Your audio track
+
+FILES YOU GET:
+  🎬 FINAL_MONOGRAPH_EDIT.mp4 → Ready to post!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WHAT IT CREATES:
+  ✅ Cinematic letterboxing (2.35:1 film bars)
+  ✅ Moody color grading
+  ✅ Slow motion effects
+  ✅ Beat-synced edits
+  ✅ Text overlay
+  ✅ Film grain
+  ✅ Fade in/out
+  ✅ Web-optimized export
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TROUBLESHOOTING:
+
+❓ "No clips found"
+   → Make sure clips are in the clips/ folder
+
+❓ "Audio not found"  
+   → Rename your song to audio.mp3
+
+❓ "ffmpeg not found"
+   → Run: sudo apt install ffmpeg
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ENJOY YOUR POST-READY VIDEO! 🎉

@@ -1,0 +1,313 @@
+# Monograph Style Video Editing Tutorial
+## DaVinci Resolve Free Version
+
+---
+
+## What is Monograph Style?
+
+Monograph editing is a cinematic aesthetic characterized by:
+- **Cinematic letterboxing** (2.35:1 or 2.39:1 aspect ratio)
+- **Slow-motion clips** synced to music beats
+- **Moody color grading** (desaturated, lifted shadows, crushed blacks)
+- **Minimal typography overlays**
+- **Documentary-style pacing** (slow, deliberate cuts)
+- **Film grain texture**
+- **Clean transitions** (cuts & subtle dissolves)
+
+---
+
+## Song Breakdown: "Feel Good Inc" - Gorillaz
+
+The song has distinct sections you can sync your clips to:
+
+| Timestamp | Section | Edit Style |
+|-----------|---------|------------|
+| 0:00 - 0:15 | Intro (bass) | Slow zoom, fade in |
+| 0:15 - 0:45 | Verse 1 | Medium cuts, color shift |
+| 0:45 - 1:15 | Pre-chorus | Build tension, speed ramp |
+| 1:15 - 1:45 | Chorus | Fast cuts, energetic |
+| 1:45 - 2:15 | Verse 2 | Back to slow |
+| 2:15 - 2:45 | Chorus 2 | Peak action |
+| 2:45 - 3:30 | Bridge/Solo | Dramatic slow-mo |
+| 3:30 - 4:00 | Final Chorus | Climax |
+| 4:00 - 4:30 | Outro | Wind down, fade out |
+
+---
+
+## Timeline Layout in DaVinci Resolve
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        TIMELINE                              │
+├─────────────────────────────────────────────────────────────┤
+│  0:00   0:30   1:00   1:30   2:00   2:30   3:00   3:30   4:00 │
+│   │       │       │       │       │       │       │       │   │
+│   ▼       ▼       ▼       ▼       ▼       ▼       ▼       ▼   │
+│ Clip 1  Clip 2  Clip 3  Clip 4  Clip 5  Clip 6  Clip 7  Clip 8 │
+│ (Intro)  (V1)   (Pre-C) (Chor1) (V2)   (Chor2) (Bridge)(Outro)│
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Step-by-Step DaVinci Resolve Tutorial
+
+### STEP 1: Project Setup
+
+1. Open DaVinci Resolve (Free version)
+2. Create New Project → Name it "Monograph Edit"
+3. Go to **Project Settings** (bottom right cogwheel)
+4. Set **Timeline Resolution**: 1920x1080
+5. Set **Frame Rate**: 24fps (cinematic look)
+6. Click **Change Timelines...** → Set to 24fps
+
+### STEP 2: Import Your Footage
+
+1. Go to **Media Page** (top)
+2. Right-click in Media Pool → **Import Media**
+3. Select your Naruto clips AND the audio track
+4. Drag audio to Track A1 on timeline first
+
+### STEP 3: Add Letterboxing (Cinematic Bars)
+
+**Go to Fusion Page:**
+
+1. Drag your video clip to timeline
+2. Click **Fusion** tab at bottom
+3. Add **Crop** node: Merge (Input 1) → Crop → Media Out
+4. In Crop settings:
+   - **Top**: 0.13 (creates 2.35:1 ratio bars)
+   - **Bottom**: 0.13
+5. Add solid black background:
+   - Merge → Background (Black) → Crop → Media Out
+6. Connect: Background → Crop → Media Out
+           Merge → Crop → Media Out
+7. Go back to **Edit Page**
+
+### STEP 4: Color Grading (Moody Cinematic Look)
+
+**Go to Color Page:**
+
+**Node 1 - Base Correction:**
+```
+Lift: 0.010 / 0.010 / 0.020 (push shadows blue-green)
+Gamma: 0.950 / 0.950 / 0.980 (slightly desaturate)
+Gain: 0.900 / 0.900 / 0.900 (lift highlights slightly)
+Saturation: 65 (reduced for cinematic feel)
+```
+
+**Node 2 - Film Look:**
+- Add **Soft Clip** or **S-curve** in Primaries
+- Enable **Film Palette** in Color Management
+
+### STEP 5: Slow Motion Effect
+
+**In Edit Page:**
+
+1. Right-click on clip → **Change Clip Speed**
+2. For "monograph" look: **50% speed** (doubles duration)
+3. For dramatic moments: **25% speed**
+
+**Speed Ramp (for transitions):**
+1. Position playhead where you want ramp
+2. Right-click clip → **Change Clip Speed**
+3. Check **Ripple** 
+4. Set initial speed (e.g., 100%)
+5. Move playhead to ramp point
+6. Right-click again → **Change Clip Speed**
+7. Set new speed (e.g., 50%)
+8. Check **Speed Curve** → choose **Ease-In**
+
+### STEP 6: Beat-Syncing Cuts
+
+**Mark beats on timeline:**
+
+1. Play audio, press **M** at each beat you want to cut on
+2. Zoom timeline way in (scroll wheel)
+3. Use **Blade tool (B)** to cut at markers
+4. Drag clips to align visual with audio beats
+
+**Suggested beat markers for "Feel Good Inc":**
+```
+0:03, 0:06, 0:09, 0:12  (Intro pattern)
+0:15, 0:18, 0:21, 0:24  (Bass hit)
+0:27, 0:30, 0:33, 0:36  (Build)
+... continue every beat
+```
+
+### STEP 7: Add Text Overlay (Fusion)
+
+**Go to Fusion Page:**
+
+1. Click **Titles** → drag **Text+** to timeline
+2. Position above video track
+3. In Inspector panel (right):
+   ```
+   Title: "NARUTO" (or your subject)
+   Font: Inter / SF Pro / Roboto
+   Size: 48
+   Position: Center X, 80% Y
+   Color: White (with 80% opacity)
+   ```
+
+**For animated text reveal:**
+1. Right-click Text+ → **Open in Fusion**
+2. Set keyframe at 0:00: Scale 0, Opacity 0
+3. Move playhead to 0:02:00
+4. Set keyframe: Scale 1, Opacity 100
+5. Add **Gaussian** blur node before Merge for softness
+
+### STEP 8: Film Grain Effect
+
+**Go to Color Page:**
+
+1. Add Serial node (Alt+S)
+2. Add **Noise** or **Grain**
+3. Settings:
+   ```
+   Amount: 0.05 - 0.15 (subtle)
+   Size: 1.0
+   Color: Monochrome
+   ```
+
+### STEP 9: Final Composition
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  Track A1: Audio (Feel Good Inc)                           │
+├────────────────────────────────────────────────────────────┤
+│  Track V1: Text Overlay ("NARUTO")                         │
+├────────────────────────────────────────────────────────────┤
+│  Track V2: Main Video Clips (letterboxed, graded, slow)   │
+└────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Specific Clip Placement Guide
+
+### Clip 1 (0:00 - 0:15): INTRO
+- **Speed**: 50%
+- **Effect**: Fade in from black
+- **Clip idea**: Character silhouette or establishing shot
+- **Text**: None (let music build)
+
+### Clip 2 (0:15 - 0:45): VERSE 1
+- **Speed**: 50%
+- **Effect**: Subtle zoom (scale 100% → 105%)
+- **Clip idea**: Walking/running sequence
+- **Color**: Slightly cooler
+
+### Clip 3 (0:45 - 1:15): PRE-CHORUS
+- **Speed**: 50% with ramp to 75%
+- **Effect**: Slight shake or glitch
+- **Clip idea**: Action buildup
+
+### Clip 4 (1:15 - 1:45): CHORUS 1
+- **Speed**: 100% normal
+- **Effect**: Faster cuts (every 2-4 beats)
+- **Clip idea**: Multiple quick clips
+
+### Clip 5 (1:45 - 2:15): VERSE 2
+- **Speed**: 50%
+- **Effect**: Return to slow pace
+- **Clip idea**: Character reaction/focus
+
+### Clip 6 (2:15 - 2:45): CHORUS 2
+- **Speed**: 75-100%
+- **Effect**: Most energetic section
+- **Clip idea**: Combo attacks, dramatic poses
+
+### Clip 7 (2:45 - 3:30): BRIDGE
+- **Speed**: 25% (ultra slow-mo)
+- **Effect**: Heavy grain, dramatic lighting
+- **Clip idea**: Single powerful moment
+
+### Clip 8 (3:30 - 4:00): FINAL CHORUS
+- **Speed**: Mixed (50% slow + 100% fast cuts)
+- **Effect**: Peak energy, slight overexposure
+- **Clip idea**: Climactic sequence
+
+### Clip 9 (4:00 - 4:30): OUTRO
+- **Speed**: 50%
+- **Effect**: Fade to black
+- **Clip idea**: Dramatic conclusion or freeze frame
+
+---
+
+## Key Shortcuts for This Edit
+
+| Shortcut | Action |
+|----------|--------|
+| **B** | Blade tool (cut clips) |
+| **V** | Selection tool |
+| **M** | Mark beat on timeline |
+| **I** | Mark in point |
+| **O** | Mark out point |
+| **Home** | Go to start |
+| **End** | Go to end |
+| **+** | Zoom in timeline |
+| **-** | Zoom out timeline |
+| **Ctrl+D** | Duplicate clip |
+| **Delete** | Remove selected |
+
+---
+
+## Quick Reference: Monograph Settings
+
+### Color Grade Preset
+```
+┌─────────────────────────────────────────┐
+│           CINEMATIC GRADE                │
+├─────────────────────────────────────────┤
+│  LIFT:   R:0.010  G:0.012  B:0.020      │
+│  GAMMA:  R:0.950  G:0.950  B:0.980      │
+│  GAIN:   R:0.900  G:0.900  B:0.900      │
+│  SAT:    65                              │
+│  CONT:   1.05                            │
+├─────────────────────────────────────────┤
+│  SHADOWS: Slight teal push              │
+│  HIGHLIGHTS: Warm slight push            │
+│  BLACKS: Crushed to 0.01                 │
+└─────────────────────────────────────────┘
+```
+
+### Letterbox Settings
+```
+┌─────────────────────────────────────────┐
+│           CINEMATIC RATIO               │
+├─────────────────────────────────────────┤
+│  Crop Top: 0.13                         │
+│  Crop Bottom: 0.13                      │
+│  Result: 2.35:1 letterbox               │
+│  Bars Color: Pure Black (#000000)       │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## Export Settings
+
+1. Go to **Deliver Page**
+2. Output Format: **MP4**
+3. Codec: **H.264**
+4. Resolution: **1920x1080**
+5. Frame Rate: **24fps**
+6. Quality: **Medium to High**
+7. Audio: **AAC, 320kbps**
+8. Render!
+
+---
+
+## Tips for Best Results
+
+1. **Pre-plan your clips** before editing - know which moments you want
+2. **Watch the reference videos** multiple times to understand the pacing
+3. **Use high-quality source footage** - monograph style shows every flaw
+4. **Less is more** - don't over-edit; let moments breathe
+5. **Match visual energy to audio energy** - soft moments = slow clips, hard beats = dynamic cuts
+6. **Practice the color grade** on one clip before applying to all
+
+---
+
+*Tutorial created for DaVinci Resolve 18/19 Free Version*
