@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-MONOGRAPH EDITOR v3.1 - Fixed Version
-AI Integration with DaVinci Resolve API
+MONOGRAPH EDITOR v4.0 - Full AI Integration
+AI generates DaVinci Resolve Fusion scripts
+Auto-update detection from GitHub repo
 """
 
 import os
@@ -12,6 +13,9 @@ from pathlib import Path
 import subprocess
 import threading
 import shutil
+import json
+import urllib.request
+import urllib.error
 
 # Colors
 BG_DARK = "#050510"
@@ -21,26 +25,150 @@ CYAN = "#00f5ff"
 MAGENTA = "#ff00aa"
 GREEN = "#00ff88"
 RED = "#ff3366"
+ORANGE = "#ff9500"
 WHITE = "#ffffff"
 GRAY = "#666688"
+
+
+# ============== GITHUB AUTO-UPDATER ==============
+class GitHubUpdater:
+    def __init__(self, repo_owner="nop727272", repo_name="somepython-experiment"):
+        self.repo_owner = repo_owner
+        self.repo_name = repo_name
+        self.current_version = "4.0.0"
+        self.update_available = False
+        self.latest_version = ""
+        self.update_info = ""
+    
+    def check_for_updates(self):
+        """Check GitHub for new updates"""
+        try:
+            url = f"https://api.github.com/repos/{self.repo_owner}/{self.repo_name}/releases/latest"
+            req = urllib.request.Request(url, headers={"User-Agent": "MonographEditor"})
+            response = urllib.request.urlopen(req, timeout=10)
+            data = json.loads(response.read().decode())
+            
+            self.latest_version = data.get("tag_name", "v1.0.0").replace("v", "")
+            
+            # Compare versions
+            if self.latest_version > self.current_version:
+                self.update_available = True
+                self.update_info = data.get("body", "New update available!")
+                return True
+            return False
+        except Exception as e:
+            return False
+    
+    def get_update_countdown(self, seconds=30):
+        """Return countdown message"""
+        return f"Update available! Downloading in {seconds} seconds..."
 
 
 class MonographApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("MONOGRAPH EDITOR v3.1")
-        self.root.geometry("1000x750")
+        self.root.title("MONOGRAPH EDITOR v4.0")
+        self.root.geometry("1000x800")
         self.root.configure(bg=BG_DARK)
-        self.root.minsize(900, 700)
+        self.root.minsize(900, 750)
         
+        # Variables
         self.simple_clips = []
         self.ai_clips = []
         self.ai_audio = ""
+        self.ai_ref = ""
         self.ai_output = None
         self.openai_api_key = tk.StringVar()
         self.feedback_shown = False
         
+        # Updater
+        self.updater = GitHubUpdater()
+        
+        # Load saved API key
+        self.load_api_key()
+        
+        # Check for updates
+        self.check_updates_async()
+        
         self.show_main_menu()
+    
+    def load_api_key(self):
+        if os.path.exists("api_key.txt"):
+            with open("api_key.txt", "r") as f:
+                self.openai_api_key.set(f.read().strip())
+    
+    def save_api_key(self):
+        key = self.openai_api_key.get().strip()
+        if key:
+            with open("api_key.txt", "w") as f:
+                f.write(key)
+            messagebox.showinfo("Saved", "API key saved!")
+    
+    def check_updates_async(self):
+        """Check for updates in background"""
+        def check():
+            if self.updater.check_for_updates():
+                self.root.after(0, lambda: self.show_update_notification())
+        threading.Thread(target=check, daemon=True).start()
+    
+    def show_update_notification(self):
+        """Show update notification popup"""
+        popup = tk.Toplevel(self.root)
+        popup.title("Update Available!")
+        popup.geometry("500x300")
+        popup.configure(bg=BG_CARD)
+        popup.transient(self.root)
+        popup.grab_set()
+        
+        tk.Label(popup, text="UPDATE AVAILABLE!", font=("Consolas", 20, "bold"),
+                fg=ORANGE, bg=BG_CARD).pack(pady=20)
+        
+        tk.Label(popup, text=f"Version: {self.updater.latest_version}",
+                font=("Consolas", 14), fg=WHITE, bg=BG_CARD).pack()
+        
+        tk.Label(popup, text=self.updater.update_info[:200] if self.updater.update_info else "New features available!",
+                font=("Arial", 10), fg=GRAY, bg=BG_CARD, wraplength=450).pack(pady=10)
+        
+        btn_frame = tk.Frame(popup, bg=BG_CARD)
+        btn_frame.pack(pady=20)
+        
+        tk.Button(btn_frame, text="UPDATE NOW", 
+                 command=lambda: [popup.destroy(), self.download_update()],
+                 bg=GREEN, fg=BG_DARK, font=("Consolas", 12, "bold"),
+                 relief="flat", padx=20, pady=10).pack(side="left", padx=10)
+        
+        tk.Button(btn_frame, text="LATER", 
+                 command=popup.destroy,
+                 bg=GRAY, fg=WHITE, font=("Consolas", 12),
+                 relief="flat", padx=20, pady=10).pack(side="left", padx=10)
+        
+        # Countdown
+        self.countdown_label = tk.Label(popup, text="Auto-update in 30 seconds...",
+                                       font=("Arial", 9), fg=ORANGE, bg=BG_CARD)
+        self.countdown_label.pack(pady=10)
+        
+        self.countdown_seconds = 30
+        self.countdown_update(popup)
+    
+    def countdown_update(self, popup):
+        if self.countdown_seconds > 0:
+            self.countdown_label.config(text=f"Auto-update in {self.countdown_seconds} seconds...")
+            self.countdown_seconds -= 1
+            self.root.after(1000, lambda: self.countdown_update(popup))
+        else:
+            popup.destroy()
+            self.download_update()
+    
+    def download_update(self):
+        """Download and apply update"""
+        messagebox.showinfo("Updating", 
+                           "Download the latest version from:\n"
+                           "https://github.com/nop727272/somepython-experiment\n\n"
+                           "Extract and replace the files.")
+        
+        # Open download page
+        subprocess.run('start https://github.com/nop727272/somepython-experiment/archive/main.zip',
+                     shell=True)
     
     def clear(self):
         for widget in self.root.winfo_children():
@@ -54,61 +182,63 @@ class MonographApp:
         
         tk.Frame(bg, height=4, bg=CYAN).pack(fill="x")
         
-        tk.Label(bg, text="MONOGRAPH", font=("Consolas", 48, "bold"),
-                fg=CYAN, bg=BG_DARK).pack(pady=(80, 5))
+        # Version label
+        tk.Label(bg, text=f"v4.0.0", font=("Consolas", 8), fg=GRAY, bg=BG_DARK).place(x=20, y=10)
         
-        tk.Label(bg, text="VIDEO EDITOR", font=("Consolas", 20),
+        tk.Label(bg, text="MONOGRAPH", font=("Consolas", 48, "bold"),
+                fg=CYAN, bg=BG_DARK).pack(pady=(60, 5))
+        
+        tk.Label(bg, text="AI VIDEO EDITOR", font=("Consolas", 20),
                 fg=MAGENTA, bg=BG_DARK).pack()
         
-        tk.Label(bg, text="AI-Powered Editing with DaVinci Resolve",
-                font=("Consolas", 12), fg=GRAY, bg=BG_DARK).pack(pady=30)
+        tk.Label(bg, text="AI generates DaVinci Resolve Fusion scripts",
+                font=("Consolas", 12), fg=GRAY, bg=BG_DARK).pack(pady=25)
         
         btn_frame = tk.Frame(bg, bg=BG_DARK)
-        btn_frame.pack(pady=30)
+        btn_frame.pack(pady=25)
         
-        tk.Button(btn_frame, text="[ 1 ] SIMPLE EDIT",
-                 command=self.show_simple_edit,
-                 font=("Consolas", 16, "bold"),
-                 bg=BG_CARD, fg=CYAN, activebackground=BG_INPUT,
-                 relief="flat", padx=60, pady=20, cursor="hand2").pack(pady=10)
-        
+        # Simple Edit
+        simple_btn = tk.Button(btn_frame, text="[ 1 ] SIMPLE EDIT",
+                             command=self.show_simple_edit,
+                             font=("Consolas", 16, "bold"),
+                             bg=BG_CARD, fg=CYAN, activebackground=BG_INPUT,
+                             relief="flat", padx=60, pady=20, cursor="hand2")
+        simple_btn.pack(pady=8)
         tk.Label(btn_frame, text="Quick preset-based editing",
                 font=("Arial", 10), fg=GRAY, bg=BG_DARK).pack()
         
-        tk.Button(btn_frame, text="[ 2 ] AI SPECIAL EDIT",
-                 command=self.show_ai_edit,
-                 font=("Consolas", 16, "bold"),
-                 bg=BG_CARD, fg=MAGENTA, activebackground=BG_INPUT,
-                 relief="flat", padx=60, pady=20, cursor="hand2").pack(pady=10)
-        
-        tk.Label(btn_frame, text="AI generates Fusion scripts for DaVinci Resolve",
+        # AI Edit
+        ai_btn = tk.Button(btn_frame, text="[ 2 ] AI SPECIAL EDIT",
+                          command=self.show_ai_edit,
+                          font=("Consolas", 16, "bold"),
+                          bg=BG_CARD, fg=MAGENTA, activebackground=BG_INPUT,
+                          relief="flat", padx=60, pady=20, cursor="hand2")
+        ai_btn.pack(pady=8)
+        tk.Label(btn_frame, text="AI generates Fusion scripts with GPT-4",
                 font=("Arial", 10), fg=GRAY, bg=BG_DARK).pack()
         
-        # API Key
+        # API Key section
         api_frame = tk.Frame(bg, bg=BG_DARK)
-        api_frame.pack(pady=20)
+        api_frame.pack(pady=25, padx=60, fill="x")
         
-        tk.Label(api_frame, text="OpenAI API Key:", font=("Consolas", 10),
-                fg=WHITE, bg=BG_DARK).grid(row=0, column=0, sticky="w", padx=5)
+        tk.Label(api_frame, text="OpenAI API Key:", font=("Consolas", 11),
+                fg=WHITE, bg=BG_DARK).grid(row=0, column=0, sticky="w", padx=(0, 10))
         
-        tk.Entry(api_frame, textvariable=self.openai_api_key, width=40,
-                bg=BG_INPUT, fg=CYAN, font=("Consolas", 10),
-                show="*").grid(row=0, column=1, padx=5)
+        api_entry = tk.Entry(api_frame, textvariable=self.openai_api_key, width=38,
+                            bg=BG_INPUT, fg=CYAN, font=("Consolas", 10), show="*")
+        api_entry.grid(row=0, column=1, padx=5)
         
         tk.Button(api_frame, text="Save", command=self.save_api_key,
-                 bg=GREEN, fg=BG_DARK, font=("Consolas", 10),
-                 relief="flat").grid(row=0, column=2, padx=5)
+                 bg=GREEN, fg=BG_DARK, font=("Consolas", 10, "bold"),
+                 relief="flat", cursor="hand2").grid(row=0, column=2, padx=5)
         
-        tk.Label(bg, text="Powered by DaVinci Resolve Fusion API | v3.1",
-                font=("Arial", 9), fg="#333", bg=BG_DARK).pack(side="bottom", pady=15)
-    
-    def save_api_key(self):
-        key = self.openai_api_key.get().strip()
-        if key:
-            with open("api_key.txt", "w") as f:
-                f.write(key)
-            messagebox.showinfo("Saved", "API key saved!")
-    
+        tk.Label(api_frame, text="(Required for AI features)",
+                font=("Arial", 8), fg=GRAY, bg=BG_DARK).grid(row=1, column=1, sticky="w")
+        
+        # Footer
+        tk.Label(bg, text="Powered by DaVinci Resolve Fusion API | v4.0",
+                font=("Arial", 9), fg="#333", bg=BG_DARK).pack(side="bottom", pady=12)
+
     # ============== SIMPLE EDIT ==============
     def show_simple_edit(self):
         self.clear()
@@ -122,17 +252,17 @@ class MonographApp:
                 relief="flat", cursor="hand2").place(x=20, y=15)
         
         tk.Label(bg, text="SIMPLE EDIT", font=("Consolas", 32, "bold"),
-                fg=CYAN, bg=BG_DARK).pack(pady=35)
+                fg=CYAN, bg=BG_DARK).pack(pady=30)
         
         form = tk.Frame(bg, bg=BG_DARK)
         form.pack(pady=20, padx=60, fill="x")
         
         # Clips
         tk.Label(form, text="VIDEO CLIPS:", font=("Consolas", 12),
-                fg=WHITE, bg=BG_DARK).grid(row=0, column=0, sticky="w", pady=12)
+                fg=WHITE, bg=BG_DARK).grid(row=0, column=0, sticky="w", pady=10)
         
         clips_frame = tk.Frame(form, bg=BG_CARD)
-        clips_frame.grid(row=0, column=1, sticky="ew", pady=12)
+        clips_frame.grid(row=0, column=1, sticky="ew", pady=10)
         
         self.clips_listbox = tk.Listbox(clips_frame, height=4, bg=BG_INPUT,
                                        fg=CYAN, font=("Consolas", 10),
@@ -152,10 +282,10 @@ class MonographApp:
         
         # Audio
         tk.Label(form, text="AUDIO:", font=("Consolas", 12),
-                fg=WHITE, bg=BG_DARK).grid(row=1, column=0, sticky="w", pady=12)
+                fg=WHITE, bg=BG_DARK).grid(row=1, column=0, sticky="w", pady=10)
         
         audio_frame = tk.Frame(form, bg=BG_CARD)
-        audio_frame.grid(row=1, column=1, sticky="ew", pady=12)
+        audio_frame.grid(row=1, column=1, sticky="ew", pady=10)
         
         self.audio_entry = tk.Entry(audio_frame, width=40, bg=BG_INPUT, fg=CYAN,
                                    font=("Consolas", 11), insertbackground=CYAN)
@@ -176,7 +306,7 @@ class MonographApp:
                 padx=40, pady=12, cursor="hand2").pack(pady=10)
         
         tk.Label(bg, text="1. Add clips | 2. Select audio | 3. Create",
-                font=("Arial", 9), fg=GRAY, bg=BG_DARK).pack(pady=15)
+                font=("Arial", 9), fg=GRAY, bg=BG_DARK).pack(pady=10)
     
     def add_simple_clips(self):
         files = filedialog.askopenfilenames(
@@ -255,7 +385,7 @@ class MonographApp:
                 relief="flat", cursor="hand2").place(x=20, y=15)
         
         tk.Label(bg, text="AI SPECIAL EDIT", font=("Consolas", 32, "bold"),
-                fg=MAGENTA, bg=BG_DARK).pack(pady=25)
+                fg=MAGENTA, bg=BG_DARK).pack(pady=20)
         
         # Input section
         inp = tk.Frame(bg, bg=BG_DARK)
@@ -263,10 +393,10 @@ class MonographApp:
         
         # Clips
         tk.Label(inp, text="VIDEO CLIPS:", font=("Consolas", 11),
-                fg=WHITE, bg=BG_DARK).grid(row=0, column=0, sticky="w", pady=6)
+                fg=WHITE, bg=BG_DARK).grid(row=0, column=0, sticky="w", pady=5)
         
         clips_f = tk.Frame(inp, bg=BG_CARD)
-        clips_f.grid(row=0, column=1, sticky="ew", pady=6)
+        clips_f.grid(row=0, column=1, sticky="ew", pady=5)
         
         self.ai_clips_listbox = tk.Listbox(clips_f, height=2, bg=BG_INPUT,
                                          fg=MAGENTA, font=("Consolas", 10))
@@ -285,10 +415,10 @@ class MonographApp:
         
         # Audio
         tk.Label(inp, text="AUDIO:", font=("Consolas", 11),
-                fg=WHITE, bg=BG_DARK).grid(row=1, column=0, sticky="w", pady=6)
+                fg=WHITE, bg=BG_DARK).grid(row=1, column=0, sticky="w", pady=5)
         
         audio_f = tk.Frame(inp, bg=BG_CARD)
-        audio_f.grid(row=1, column=1, sticky="ew", pady=6)
+        audio_f.grid(row=1, column=1, sticky="ew", pady=5)
         
         self.ai_audio_entry = tk.Entry(audio_f, width=40, bg=BG_INPUT, fg=MAGENTA,
                                      font=("Consolas", 10))
@@ -298,11 +428,23 @@ class MonographApp:
                  bg=MAGENTA, fg=BG_DARK, font=("Consolas", 10),
                  relief="flat", width=4).pack(side="right", padx=5, pady=5)
         
+        # AI Prompt
+        tk.Label(inp, text="AI PROMPT:", font=("Consolas", 11),
+                fg=MAGENTA, bg=BG_DARK).grid(row=2, column=0, sticky="w", pady=5)
+        
+        prompt_f = tk.Frame(inp, bg=BG_CARD)
+        prompt_f.grid(row=2, column=1, sticky="ew", pady=5)
+        
+        self.ai_prompt_entry = tk.Entry(prompt_f, width=40, bg=BG_INPUT, fg=MAGENTA,
+                                       font=("Consolas", 10))
+        self.ai_prompt_entry.insert(0, "Cinematic edit with letterboxing, slow motion, and film grain")
+        self.ai_prompt_entry.pack(side="left", padx=5, pady=5, fill="x", expand=True)
+        
         # Chat
         chat_f = tk.Frame(bg, bg=BG_CARD)
         chat_f.pack(pady=10, padx=60, fill="both", expand=True)
         
-        self.ai_chat = scrolledtext.ScrolledText(chat_f, height=14,
+        self.ai_chat = scrolledtext.ScrolledText(chat_f, height=15,
                                                bg=BG_DARK, fg=MAGENTA,
                                                font=("Consolas", 10), relief="flat",
                                                state="disabled", wrap="word")
@@ -311,19 +453,20 @@ class MonographApp:
         self.ai_chat.config(state="normal")
         self.ai_chat.insert("end", """AI: Welcome to AI Special Edit!
 
-I generate Fusion scripts for DaVinci Resolve FREE!
+I use GPT-4 to generate DaVinci Resolve Fusion scripts!
 
-Add your clips and audio, then describe what you want:
-- "Cinematic with letterboxing and color grading"
-- "Slow motion anime edit with film grain"
-- "Dramatic cuts and text overlay"
-
-Describe your vision and I'll create the script!
+1. Add your video clips
+2. Select an audio file  
+3. Enter an AI prompt describing your vision
+4. Click SEND to generate the script
 
 EXAMPLE PROMPTS:
-- "Make it look cinematic with 2.35:1 letterboxing"
-- "Slow motion effects with teal shadows"
-- "Add dramatic color grading and film grain"
+- "Cinematic with 2.35:1 letterboxing and teal shadows"
+- "Slow motion anime edit with film grain and dramatic color grading"
+- "Dark moody look with warm highlights and cool shadows"
+- "Add text overlay and smooth transitions"
+
+The AI will create a complete Python script for DaVinci Resolve!
 """)
         self.ai_chat.config(state="disabled")
         
@@ -331,12 +474,12 @@ EXAMPLE PROMPTS:
         input_row = tk.Frame(bg, bg=BG_DARK)
         input_row.pack(pady=10, padx=60, fill="x")
         
-        self.ai_input = tk.Entry(input_row, width=55, bg=BG_INPUT, fg=WHITE,
+        self.ai_input = tk.Entry(input_row, width=50, bg=BG_INPUT, fg=WHITE,
                                 font=("Consolas", 12), insertbackground=MAGENTA)
         self.ai_input.pack(side="left")
         self.ai_input.bind("<Return>", lambda e: self.send_ai())
         
-        tk.Button(input_row, text="SEND", command=self.send_ai,
+        tk.Button(input_row, text="SEND TO AI", command=self.send_ai,
                  bg=MAGENTA, fg=BG_DARK, font=("Consolas", 11, "bold"),
                  relief="flat", cursor="hand2").pack(side="right", padx=(10, 0))
         
@@ -382,11 +525,13 @@ EXAMPLE PROMPTS:
     def send_ai(self):
         msg = self.ai_input.get().strip()
         if not msg:
+            msg = self.ai_prompt_entry.get().strip()
+        if not msg:
             return
-        self.ai_input.delete(0, "end")
         
+        self.ai_input.delete(0, "end")
         self.update_ai_chat(msg, is_user=True)
-        self.ai_status.config(text="AI generating...")
+        self.ai_status.config(text="AI generating Fusion script...")
         
         threading.Thread(target=self.ai_process, args=(msg,), daemon=True).start()
     
@@ -400,153 +545,121 @@ EXAMPLE PROMPTS:
             return
         
         if any(w in msg_lower for w in ["no", "not", "change", "redo", "fix"]):
-            response = "AI: What should I change? Describe modifications:"
+            response = "AI: What should I change? Describe the modifications:"
             self.root.after(0, lambda: self.update_ai_chat(response))
             return
         
-        response = self.generate_fusion_script(msg)
+        response = self.call_openai_gpt4(msg)
         self.root.after(0, lambda: self.ai_finish(response))
     
-    def generate_fusion_script(self, user_request):
+    def call_openai_gpt4(self, user_request):
+        """Call OpenAI GPT-4 to generate Fusion script"""
+        api_key = self.openai_api_key.get().strip()
+        
+        if not api_key:
+            return "AI: Please enter your OpenAI API key in the main menu first!"
+        
         if not self.ai_clips:
             return "AI: Add at least one video clip first."
         
         audio = self.ai_audio_entry.get().strip()
         if not audio:
-            return "AI: Select an audio file."
+            return "AI: Select an audio file first."
         
-        self.root.after(0, lambda: self.ai_status.config(text="Generating Fusion script..."))
+        self.root.after(0, lambda: self.ai_status.config(text="GPT-4 generating Fusion script..."))
         
-        # Generate script
-        script_content = self.create_fusion_script(user_request)
+        # Build prompt for GPT-4
+        prompt = f"""You are a DaVinci Resolve Fusion script expert. Generate a complete Python script for DaVinci Resolve FREE.
+
+USER REQUEST: {user_request}
+
+CLIPS TO IMPORT: {self.ai_clips}
+AUDIO FILE: {audio}
+
+Generate a Python script that:
+1. Imports these video clips to the media pool
+2. Creates a new timeline
+3. Applies cinematic effects using Fusion:
+   - Letterboxing (Crop tool, top=0.13, bottom=0.13 for 2.35:1 ratio)
+   - Color grading (ColorCorrect, saturation=0.65, teal shadows)
+   - Film grain (FilmGrain tool, amount=0.08)
+   - Text overlay (Text+ tool)
+4. Adds the audio track
+5. Sets up render settings (1920x1080, 24fps, H.264)
+
+CRITICAL: The script must work with the FREE version of DaVinci Resolve.
+Use only the public API methods documented in DaVinci Resolve Scripting API.
+
+Format your response as a complete Python script starting with:
+#!/usr/bin/env python3
+
+The script will be saved and can be run in DaVinci Resolve's Fusion Console.
+"""
         
-        script_path = "ai_generated_edit.py"
-        with open(script_path, "w") as f:
-            f.write(script_content)
-        
-        self.ai_output = script_path
-        
-        return f"""AI: I've generated a Fusion script for your request!
+        try:
+            url = "https://api.openai.com/v1/chat/completions"
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}"
+            }
+            
+            data = {
+                "model": "gpt-4",
+                "messages": [
+                    {"role": "system", "content": "You are a DaVinci Resolve Fusion scripting expert. Write complete, working Python scripts for the free version of DaVinci Resolve."},
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": 2500,
+                "temperature": 0.7
+            }
+            
+            req = urllib.request.Request(url, data=json.dumps(data).encode(), headers=headers)
+            response = urllib.request.urlopen(req, timeout=60)
+            result = json.loads(response.read().decode())
+            
+            gpt_response = result["choices"][0]["message"]["content"]
+            
+            # Save script
+            script_path = "monograph_ai_script.py"
+            with open(script_path, "w") as f:
+                f.write(gpt_response)
+            
+            self.ai_output = script_path
+            
+            return f"""AI: I've generated a complete Fusion script using GPT-4!
 
 Script saved as: {script_path}
 
-The script uses DaVinci Resolve Fusion API to:
-- Import your {len(self.ai_clips)} clips
-- Apply cinematic letterboxing (2.35:1)
-- Color grading (desaturated, teal shadows)
+The script includes:
+- Video clip import
+- Letterboxing (2.35:1 cinematic)
+- Color grading (cinematic look)
 - Film grain effect
 - Text overlay
+- Audio track integration
+- Render settings
 
-To run: Open DaVinci Resolve > Fusion page > Console > exec(open('{script_path}').read())
+TO USE THE SCRIPT:
+1. Open DaVinci Resolve
+2. Go to Fusion page
+3. Open Console (View > Console)
+4. Type: exec(open('{script_path}').read())
 
-Is this what you wanted?
-[ YES, GOOD! ] or [ NO, CHANGE ]"""
-    
-    def create_fusion_script(self, request):
-        """Create a DaVinci Resolve Fusion script"""
-        clip_list = str(self.ai_clips)
-        audio_path = self.ai_audio_entry.get().strip()
+Or copy the script content and paste it into the console.
+
+Is this what you wanted? [ YES, GOOD! ] or [ NO, CHANGE ]"""
         
-        script = f'''#!/usr/bin/env python3
-"""
-Monograph AI Generated Edit
-Request: {request}
-"""
-
-import sys
-import os
-
-# DaVinci Resolve API
-try:
-    import DaVinciResolveScript as dvr_script
-    resolve = dvr_script.scriptapp("Resolve")
-except ImportError:
-    print("DaVinci Resolve not found!")
-    print("Install DaVinci Resolve and run from Fusion Console")
-    sys.exit(1)
-
-def main():
-    # Get Fusion
-    fusion = resolve.Fusion()
-    projectManager = resolve.GetProjectManager()
-    
-    # Create project
-    project = projectManager.CreateProject("Monograph AI Edit")
-    
-    # Get media pool
-    mediaPool = project.GetMediaPool()
-    
-    # Import clips
-    clipPaths = {clip_list}
-    importedClips = mediaPool.ImportMedia(list(clipPaths))
-    
-    if importedClips:
-        # Create timeline
-        timeline = mediaPool.CreateTimelineFromClips("AI Edit", importedClips)
-        project.SetCurrentTimeline(timeline)
-        
-        # Get current comp for Fusion effects
-        comp = fusion.GetCurrentComp()
-        
-        if comp:
-            # Letterboxing - Crop top and bottom
-            crop = comp.AddTool("Crop")
-            crop.Top.Value = 0.13
-            crop.Bottom.Value = 0.13
-            crop.Left.Value = 0.0
-            crop.Right.Value = 0.0
-            
-            # Color grading - Cinematic look
-            color = comp.AddTool("ColorCorrect")
-            color.Saturation.Value = 0.65
-            color.Contrast.Value = 1.05
-            color.Lift[0].Value = 0.010
-            color.Lift[1].Value = 0.012
-            color.Lift[2].Value = 0.020
-            color.Gamma[0].Value = 0.950
-            color.Gamma[1].Value = 0.950
-            color.Gamma[2].Value = 0.980
-            
-            # Film grain
-            grain = comp.AddTool("FilmGrain")
-            grain.GrainAmount.Value = 0.08
-            grain.Size.Value = 1.0
-            grain.Colorize.Value = False
-            
-            # Text overlay
-            text = comp.AddTool("Text+")
-            text.Titles[0].Value = "MONOGRAPH"
-            text.Styles[0].Font.Value = "Arial"
-            text.Styles[0].Size.Value = 48
-            text.Styles[0].Italic.Value = False
-            text.GlobalPosition[0].Value = 0.5
-            text.GlobalPosition[1].Value = 0.8
-            text.Alignment.Value = 1  # Center
-            
-            print("Effects applied: Letterbox, Color Grade, Film Grain, Text")
-    
-    # Set render settings
-    project.SetRenderSettings({{
-        "OutputFilename": "AI_EDIT_OUTPUT.mp4",
-        "ResolutionWidth": 1920,
-        "ResolutionHeight": 1080,
-        "FrameRate": 24
-    }})
-    
-    # Add render job
-    jobId = project.AddRenderJob()
-    print(f"Render job created: {{jobId}}")
-
-if __name__ == "__main__":
-    main()
-'''
-        return script
+        except urllib.error.HTTPError as e:
+            return f"AI: OpenAI API Error: {e.code} - {e.read().decode()[:200]}"
+        except Exception as e:
+            return f"AI: Error calling OpenAI: {str(e)}"
     
     def ai_finish(self, response):
         self.update_ai_chat(response)
         self.ai_status.config(text="")
         
-        if "generated" in response.lower():
+        if "generated" in response.lower() or "script" in response.lower():
             self.show_feedback()
     
     def show_feedback(self):
@@ -572,10 +685,10 @@ if __name__ == "__main__":
                  relief="flat", cursor="hand2", padx=15, pady=8).pack(side="left", padx=8)
     
     def view_script(self):
-        if os.path.exists("ai_generated_edit.py"):
-            with open("ai_generated_edit.py", "r") as f:
+        if os.path.exists("monograph_ai_script.py"):
+            with open("monograph_ai_script.py", "r") as f:
                 content = f.read()
-            messagebox.showinfo("Generated Script", content[:2000] + "...")
+            messagebox.showinfo("GPT-4 Generated Script", content[:2500] + "\n\n...(truncated)")
     
     def ai_yes(self):
         self.update_ai_chat("You: Yes, perfect!")
@@ -584,12 +697,13 @@ if __name__ == "__main__":
     
     def ai_no(self):
         self.update_ai_chat("You: Please change it...")
-        self.update_ai_chat("AI: What modifications do you want?")
+        self.update_ai_chat("AI: What should I modify?")
         self.feedback_frame.pack_forget()
         self.feedback_shown = False
 
 
 if __name__ == "__main__":
+    import json
     root = tk.Tk()
     app = MonographApp(root)
     root.mainloop()
